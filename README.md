@@ -52,6 +52,18 @@ python -m esh run data/xinan -o data/results_xinan
 - 与 GTDS 储能出力对比：`python -m esh compare-gtds --storage 储能电站出力一览表.xlsx data/results_xinan/base`，输出年度指标、月度放电量和日内平均出力曲线（`compare_*.csv`）
 - 系统内各节点按一个整体计算（不考虑输电约束），未计外送/受入；弃电率分母包含水电
 
+## 第三遍（可选）：弃电不足时火电低谷充电
+
+`python -m esh run <数据目录> --valley`（或 config.json 中 `"thermal_valley_charging": true`）在第二遍之后增加一遍，
+开机方式不变，用储能剩余的能力对火电削峰填谷：
+
+- 每个调度窗口为每天 `valley_window_start`（默认 10）时起 24 h，储能按短时优先、效率优先依次安排；
+- 充电只在没有剩余弃电的时段，充电后火电出力不超过容量线；放电只在本窗口最后一个充电小时之后，放电后火电不低于最小出力线；
+- 充电按火电出力填谷灌水、放电按火电出力削峰灌水，窗口内放完；
+- 只有当"低谷充电后的火电水位 ≤ `valley_ratio` × 高峰放电后的水位"时才充放，`valley_ratio` 默认取该储能的往返效率，
+  即火电边际成本随出力升高、峰谷差需大于储能损耗；
+- 校验中"火电充电"允许出现在保供周和第三遍的充电时段。
+
 ## 输出结果
 
 每个方案的结果写入 `results/<方案>/`：

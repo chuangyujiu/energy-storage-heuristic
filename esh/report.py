@@ -11,13 +11,15 @@ import pandas as pd
 from .model import SystemData
 from .scheduler import Result
 
-STAGE_NAMES = {"before": "储能投入前", "pass1": "第一遍后", "pass2": "第二遍后"}
+STAGE_NAMES = {"before": "储能投入前", "pass1": "第一遍后", "pass2": "第二遍后", "pass3": "第三遍后"}
 
 
 def summary(sd: SystemData, res: Result) -> dict:
     ren = float(sd.renewable.sum())
     out = {"方案": res.mode, "环形年迭代次数": res.ring_iters}
     for key, name in STAGE_NAMES.items():
+        if key not in res.stages:
+            continue
         gen, curt, short = res.stages[key]
         out[name] = {"弃电量_MWh": float(curt.sum()),
                      "弃电率": float(curt.sum() / ren) if ren > 0 else 0.0,
@@ -53,6 +55,8 @@ def write(sd: SystemData, res: Result, out_dir: str | Path) -> dict:
     hourly = {"小时": np.arange(sd.T), "负荷": sd.load, "净负荷": sd.net_load,
               "容量线": p1.cap_line, "最小出力线": p1.min_line}
     for key, name in STAGE_NAMES.items():
+        if key not in res.stages:
+            continue
         gen, curt, short = res.stages[key]
         hourly[f"火电_{name}"] = gen
         hourly[f"弃电_{name}"] = curt
@@ -80,6 +84,8 @@ def write(sd: SystemData, res: Result, out_dir: str | Path) -> dict:
 def print_summary(s: dict):
     print(f"== 方案：{s['方案']}" + (f"（环形年迭代 {s['环形年迭代次数']} 次）" if s["方案"] == "ring" else ""))
     for name in STAGE_NAMES.values():
+        if name not in s:
+            continue
         v = s[name]
         print(f"  {name:<6} 弃电 {v['弃电量_MWh']:>12,.0f} MWh  弃电率 {v['弃电率']:6.2%}  "
               f"火电 {v['火电发电量_MWh']:>14,.0f} MWh  缺电 {v['缺电量_MWh']:>10,.0f} MWh")

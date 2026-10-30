@@ -21,7 +21,9 @@ def dispatch(sd: SystemData, st: State, min_line, cap_line):
     return gen, curt, short
 
 
-def validate(sd: SystemData, st: State, min_line, cap_line, guarantee_mask, ring: bool) -> dict:
+def validate(sd: SystemData, st: State, min_line, cap_line, guarantee_mask, ring: bool,
+             thermal_charge_ok=None) -> dict:
+    """thermal_charge_ok：除保供周外允许火电充电的小时（第三遍火电低谷充电）。"""
     gen, curt, short = dispatch(sd, st, min_line, cap_line)
     checks = {}
 
@@ -37,8 +39,9 @@ def validate(sd: SystemData, st: State, min_line, cap_line, guarantee_mask, ring
     add("保供周缺电与记录一致", abs(gs - st.shortage.sum()) < max(TOL, 1e-6 * gs),
         f"反算 {gs:.1f} MWh / 记录 {st.shortage.sum():.1f} MWh")
     thermal_ch = (sd.net_load + st.ch_total > min_line + TOL) & (st.ch_total > TOL)
-    add("火电充电仅出现在保供周", not (thermal_ch & ~guarantee_mask).any(),
-        f"{int((thermal_ch & ~guarantee_mask).sum())} 个小时")
+    ok = guarantee_mask if thermal_charge_ok is None else guarantee_mask | thermal_charge_ok
+    add("火电充电仅出现在允许时段", not (thermal_ch & ~ok).any(),
+        f"{int((thermal_ch & ~ok).sum())} 个小时")
 
     for j, s in enumerate(sd.storages):
         lift0 = st.lift[j, -1] if ring else 0.0

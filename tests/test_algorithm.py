@@ -183,3 +183,48 @@ def test_security_commitment_floor():
     w = res.p1.weeks[0]
     assert w.N == 3 and w.k == 0
     assert_checks(res)
+
+
+def test_pass3_thermal_valley_charging():
+    """无弃电时，火电低谷（中午）充电、高峰（晚上）放电，削峰填谷且不越线。"""
+    T = 168
+    nl = np.full(T, 300.0)
+    for d in range(7):
+        nl[d * 24 + 12: d * 24 + 15] = 250.0     # 低谷（6 台最小出力线 240，无弃电）
+        nl[d * 24 + 19: d * 24 + 21] = 420.0     # 高峰（6 台容量线 500）
+    sd = toy(nl, [Storage("bat", 50, 100, 0.81)])
+    sd.config.thermal_valley_charging = True
+    res = solve(sd)
+    st = res.st
+    assert res.stages["pass2"][1].sum() == pytest.approx(0.0, abs=1e-6)
+    assert st.pch[0].sum() > 0 and st.pdis[0].sum() > 0
+    gen = res.stages["pass3"][0]
+    assert gen[19:21].max() < 420.0 and gen[12:15].min() > 250.0
+    assert_checks(res)
+
+
+def test_pass3_skips_when_spread_below_losses():
+    """峰谷差小于储能损耗时不做火电充放。"""
+    T = 168
+    nl = np.full(T, 300.0)
+    for d in range(7):
+        nl[d * 24 + 12: d * 24 + 15] = 290.0
+        nl[d * 24 + 19: d * 24 + 21] = 310.0     # 290 / 310 = 0.935 > η = 0.81
+    sd = toy(nl, [Storage("bat", 50, 100, 0.81)])
+    sd.config.thermal_valley_charging = True
+    res = solve(sd)
+    assert res.st.pch[0].sum() == pytest.approx(0.0, abs=1e-6)
+    assert_checks(res)
+
+
+def test_pass3_flat_plateau_before_valley():
+    """窗口开头与夜间高峰一样高（平台）时，放电只排在充电之后，仍能削峰填谷。"""
+    T = 168
+    nl = np.full(T, 420.0)
+    for d in range(7):
+        nl[d * 24 + 12: d * 24 + 16] = 250.0
+    sd = toy(nl, [Storage("bat", 50, 100, 0.81)])
+    sd.config.thermal_valley_charging = True
+    res = solve(sd)
+    assert res.st.pch[0].sum() > 0
+    assert_checks(res)

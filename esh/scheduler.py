@@ -1,4 +1,4 @@
-"""算法总流程：第一遍（容量效益）→ 第二遍（消纳）→ 校验与指标。"""
+"""算法总流程：第一遍（容量效益）→ 第二遍（消纳）→ [第三遍（火电低谷充电）] → 校验与指标。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ from .commitment import Fleet
 from .model import SystemData
 from .pass1 import Pass1
 from .pass2 import Pass2
+from .pass3 import Pass3
 from .validate import dispatch, validate
 
 
@@ -20,6 +21,7 @@ class Result:
     stages: dict           # 各阶段的 (火电出力, 弃电, 缺电)
     checks: dict
     ring_iters: int = 0
+    p3: Pass3 | None = None
 
     @property
     def st(self):
@@ -61,5 +63,10 @@ def solve(sd: SystemData, mode: str = "base") -> Result:
     stages["pass1"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
     p2 = Pass2(sd, p1.st, p1.min_line, p1.cap_line).run()
     stages["pass2"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
-    checks = validate(sd, p1.st, p1.min_line, p1.cap_line, p1.guarantee_mask, ring)
-    return Result(mode, p1, p2, stages, checks, iters)
+    p3, thermal_ok = None, None
+    if sd.config.thermal_valley_charging:
+        p3 = Pass3(sd, p1.st, p1.min_line, p1.cap_line).run()
+        stages["pass3"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
+        thermal_ok = p3.thermal_charge > 1e-6
+    checks = validate(sd, p1.st, p1.min_line, p1.cap_line, p1.guarantee_mask, ring, thermal_ok)
+    return Result(mode, p1, p2, stages, checks, iters, p3)

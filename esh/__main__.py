@@ -26,6 +26,7 @@ def main(argv=None):
     r.add_argument("-o", "--out", default="results")
     r.add_argument("--mode", choices=["base", "ring", "both"], default="both",
                    help="base=年初 SOC 取下限；ring=环形年；both=两种都跑并比较（默认）")
+    r.add_argument("--valley", action="store_true", help="第三遍：弃电不足时允许火电在低谷时段充电")
     g = sub.add_parser("gtds", help="把 GTDS 的 Excel 数据转换为输入目录")
     g.add_argument("--units", required=True, help="机组参数表（含系统表、负荷表、电站表、机组表）")
     g.add_argument("--plants", required=True, help="电站出力一览表（G/U 表）")
@@ -63,6 +64,8 @@ def main(argv=None):
         return
 
     sd = SystemData.from_dir(a.data)
+    if a.valley:
+        sd.config.thermal_valley_charging = True
     modes = ["base", "ring"] if a.mode == "both" else [a.mode]
     summaries = {}
     for m in modes:

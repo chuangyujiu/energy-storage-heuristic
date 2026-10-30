@@ -84,6 +84,9 @@ class Config:
     ring_max_iter: int = 5                # 环形年最大迭代次数
     hydro_in_curtail_base: bool = False   # 弃电率分母是否包含水电
     min_online_ratio: float = 0.0         # 保安开机：在运火电容量 ≥ 该比例 × 火电总装机
+    thermal_valley_charging: bool = False  # 第三遍：弃电不足时允许火电在低谷时段充电
+    valley_window_start: int = 10          # 第三遍调度窗口起点（每天该时刻起 24 h）
+    valley_ratio: float | None = None      # 低谷水位 ≤ 比例 × 高峰水位才充放；默认取储能往返效率
 
 
 @dataclass
