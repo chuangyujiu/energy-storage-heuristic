@@ -71,7 +71,7 @@ def read_plant_sheets(path) -> dict[int, np.ndarray]:
 
 def convert(units_xlsx, plants_xlsx, load_dir, out_dir, system: str = "西南",
             accident_rate: float = 0.04, hydro_in_curtail_base: bool = True,
-            security: bool = False) -> dict:
+            security: bool = False, coal_must_run: bool = False) -> dict:
     wb = openpyxl.load_workbook(units_xlsx, data_only=True)
     sysrow = next(r for r in _table(wb, "系统表") if r["名称"] == system)
     sid = sysrow["系统ID"]
@@ -97,10 +97,13 @@ def convert(units_xlsx, plants_xlsx, load_dir, out_dir, system: str = "西南",
         if typ in COAL | GAS | OTHER | NUCLEAR:
             coal = {**{t: float(u.get("燃料单耗") or 0) for t in COAL},
                     **{t: GAS_PRIORITY for t in GAS}, **{t: OTHER_PRIORITY for t in OTHER | NUCLEAR}}[typ]
+            # 燃机在 GTDS 特性表中为启停调峰（最小出力 0），机组表"技术出力 1"不是最小出力
+            pmin = 0.0 if typ in GAS else cap * float(u["技术出力"])
             for k in range(n):
                 units.append(dict(name=f"{p['名称']}#{k + 1}", capacity=cap,
-                                  pmin=round(cap * float(u["技术出力"]), 3), coal=coal,
-                                  must_run=typ in OTHER | NUCLEAR, must_run_weeks=""))
+                                  pmin=round(pmin, 3), coal=coal,
+                                  must_run=typ in OTHER | NUCLEAR | (COAL if coal_must_run else set()),
+                                  must_run_weeks=""))
         elif typ in PUMPED | BATTERY:
             key = "抽水蓄能" if typ in PUMPED else "新型储能"
             s = storages[key]
