@@ -23,6 +23,7 @@ class ThermalUnit:
     coal: float                     # 煤耗 g/kWh，决定开机优先级
     must_run: bool = False          # 是否必开
     must_run_weeks: tuple | None = None  # 仅在这些周（0 起）必开，如供暖季；None 表示 must_run 全年有效
+    max_ratio: tuple | None = None  # 分月最大出力比例（12 个值，如供暖季 0.8）；None 表示全年为 1
 
     def is_must_run(self, week: int) -> bool:
         if not self.must_run:
@@ -33,12 +34,17 @@ class ThermalUnit:
 @dataclass
 class Storage:
     name: str
-    power: float                    # 额定功率 MW（充放相同）
+    power: float                    # 额定（放电）功率 MW
     energy: float                   # 额定容量 MWh
     eta_rt: float                   # 往返效率
     soc_min: float = 0.0            # SOC 下限（占额定容量比例）
     soc_max: float = 1.0            # SOC 上限
     self_discharge_day: float = 0.0  # 每天自损耗率，日储能取 0
+    charge_ratio: float = 1.0       # 充电功率 / 放电功率（如抽蓄 1.1）
+
+    @property
+    def p_ch(self) -> float:
+        return self.power * self.charge_ratio
 
     @property
     def duration(self) -> float:
@@ -87,6 +93,8 @@ class Config:
     thermal_valley_charging: bool = False  # 第三遍：弃电不足时允许火电在低谷时段充电
     valley_window_start: int = 10          # 第三遍调度窗口起点（每天该时刻起 24 h）
     valley_ratio: float | None = None      # 低谷水位 ≤ 比例 × 高峰水位才充放；默认取储能往返效率
+    accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
+    min_reserve: float = 0.0               # 最小备用 MW
 
 
 @dataclass
@@ -102,6 +110,12 @@ class SystemData:
     def T(self) -> int:
         return len(self.net_load)
 
+    @property
+    def month(self) -> np.ndarray:
+        """每小时所在月份（0–11），按非闰年从 1 月 1 日 0 时起算。"""
+        days = np.cumsum([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]) * 24
+        return np.minimum(np.searchsorted(days, np.arange(self.T), side="right") - 1, 11)
+
     def week_bounds(self) -> list[tuple[int, int]]:
         """按 168 h 分周，最后一周并入不足一周的余数（8760 h → 52 周，末周 192 h）。"""
         n = max(1, self.T // HOURS_PER_WEEK)
@@ -114,8 +128,8 @@ class SystemData:
     def from_dir(cls, path: str | Path) -> "SystemData":
         """读取目录：timeseries.csv、units.csv、storages.csv、config.json（可选）。
 
-        timeseries.csv 列：load, wind, solar, nuclear, import, hydro（缺失列按 0）。
-        净负荷 = 负荷 − 风电 − 光伏 − 核电 − 外来电净受入 − 水电。
+        timeseries.csv 列：load, wind, solar, csp, nuclear, import, hydro（缺失列按 0）。
+        净负荷 = 负荷 − 风电 − 光伏 − 光热 − 核电 − 外来电净受入 − 水电。
         """
         path = Path(path)
         ts = pd.read_csv(path / "timeseries.csv")
@@ -124,8 +138,9 @@ class SystemData:
         cfg = Config()
         if (path / "config.json").exists():
             cfg = Config(**json.loads((path / "config.json").read_text(encoding="utf-8")))
-        renewable = col("wind") + col("solar") + (col("hydro") if cfg.hydro_in_curtail_base else 0)
-        net = load - col("wind") - col("solar") - col("nuclear") - col("import") - col("hydro")
+        renewable = col("wind") + col("solar") + col("csp") + (col("hydro") if cfg.hydro_in_curtail_base else 0)
+        net = (load - col("wind") - col("solar") - col("csp") - col("nuclear") - col("import")
+               - col("hydro"))
 
         units = []
         for r in pd.read_csv(path / "units.csv").to_dict("records"):
@@ -134,15 +149,18 @@ class SystemData:
                 weeks = tuple(_parse_weeks(weeks))
             else:
                 weeks = None
+            mr = r.get("max_ratio")
+            mr = tuple(float(x) for x in mr.split(";")) if isinstance(mr, str) and mr.strip() else None
             units.append(ThermalUnit(str(r["name"]), float(r["capacity"]), float(r["pmin"]),
-                                     float(r["coal"]), bool(r.get("must_run", False)), weeks))
+                                     float(r["coal"]), bool(r.get("must_run", False)), weeks, mr))
 
         storages = []
         for r in pd.read_csv(path / "storages.csv").to_dict("records"):
             storages.append(Storage(str(r["name"]), float(r["power"]), float(r["energy"]),
                                     float(r["eta_rt"]), float(r.get("soc_min", 0.0)),
                                     float(r.get("soc_max", 1.0)),
-                                    float(r.get("self_discharge_day", 0.0))))
+                                    float(r.get("self_discharge_day", 0.0)),
+                                    float(r.get("charge_ratio", 1.0) or 1.0)))
 
         return cls(load, net, renewable, units, storages, cfg)
 

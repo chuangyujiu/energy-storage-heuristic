@@ -13,6 +13,10 @@ class Fleet:
         self.cfg = sd.config
         self.cap = np.array([u.capacity for u in self.units])
         self.pmin = np.array([u.pmin for u in self.units])
+        # 分月可用容量比例（供暖季降出力等）：shape (机组, 12)
+        self.ratio = np.array([u.max_ratio if u.max_ratio else (1.0,) * 12 for u in self.units])
+        self.month = sd.month
+        self._cache: dict = {}
 
     def order(self, week: int) -> list[int]:
         """开机优先级：本周必开机组在前，其余按煤耗从低到高。"""
@@ -33,19 +37,38 @@ class Fleet:
             n = max(n, int(np.searchsorted(cum, need - 1e-9)) + 1)
         return min(n, len(order))
 
+    def _cum(self, order: list[int]) -> dict:
+        """按开机顺序累加：前 n 台的分月可用容量、分月最小出力、最大单机（缓存）。"""
+        key = tuple(order)
+        c = self._cache.get(key)
+        if c is None:
+            o = np.asarray(order, int)
+            avail = self.cap[o, None] * self.ratio[o]
+            pmin = np.minimum(self.pmin[o, None], avail)
+            z = np.zeros((1, 12))
+            c = {"avail": np.vstack([z, np.cumsum(avail, 0)]),
+                 "pmin": np.vstack([z, np.cumsum(pmin, 0)]),
+                 "big": np.concatenate([[0.0], np.maximum.accumulate(self.cap[o])]) if o.size
+                 else np.zeros(1)}
+            self._cache[key] = c
+        return c
+
     def lines(self, order: list[int], n: int, hours: np.ndarray):
         """按优先级开前 n 台：返回 (容量线, 最小出力线)。
 
         负荷备用 = 负荷 × 负荷备用率；
-        事故备用 = max(负荷 × 事故备用率, 在运最大单机容量)。
+        事故备用 = max(负荷 × 事故备用率, 在运最大单机容量)（可关闭最大单机项）；
+        总备用不低于最小备用。容量按分月最大出力比例折算。
         """
-        on = order[:n]
+        cum = self._cum(order)
         load = self.sd.load[hours]
-        biggest = self.cap[on].max() if on else 0.0
+        biggest = cum["big"][n] if self.cfg.accident_largest_unit else 0.0
         reserve = load * self.cfg.load_reserve_rate + np.maximum(
             load * self.cfg.accident_reserve_rate, biggest)
-        cap_line = self.cap[on].sum() - reserve
-        min_line = np.full(len(hours), self.pmin[on].sum())
+        reserve = np.maximum(reserve, self.cfg.min_reserve)
+        mon = self.month[hours]
+        cap_line = cum["avail"][n][mon] - reserve       # 各月在运可用容量 − 备用
+        min_line = cum["pmin"][n][mon]
         return cap_line, min_line
 
     def required(self, order: list[int], hours: np.ndarray, n_must: int) -> int:

@@ -27,6 +27,13 @@ def main(argv=None):
     r.add_argument("--mode", choices=["base", "ring", "both"], default="both",
                    help="base=年初 SOC 取下限；ring=环形年；both=两种都跑并比较（默认）")
     r.add_argument("--valley", action="store_true", help="第三遍：弃电不足时允许火电在低谷时段充电")
+    b = sub.add_parser("balance", help="把 GTDS 8760h 电力平衡表 + 机组参数表转换为输入目录")
+    b.add_argument("--balance", required=True, help="8760h 电力平衡结果汇总表")
+    b.add_argument("--params", required=True, help="机组参数表（GTDS 格式）")
+    b.add_argument("--system", default="西北")
+    b.add_argument("--priority", choices=["size", "flex"], default="size",
+                   help="火电开机优先级：size=单机容量从大到小；flex=技术出力从低到高")
+    b.add_argument("-o", "--out", default="data/balance")
     g = sub.add_parser("gtds", help="把 GTDS 的 Excel 数据转换为输入目录")
     g.add_argument("--units", required=True, help="机组参数表（含系统表、负荷表、电站表、机组表）")
     g.add_argument("--plants", required=True, help="电站出力一览表（G/U 表）")
@@ -37,19 +44,31 @@ def main(argv=None):
     g.add_argument("--coal-must-run", action="store_true", help="煤电全年全开（与 GTDS 模拟结果一致）")
     g.add_argument("-o", "--out", default="data/gtds")
     c = sub.add_parser("compare-gtds", help="与 GTDS 储能出力对比")
-    c.add_argument("--storage", required=True, help="GTDS 储能电站 发+/充- 电力一览表")
+    c.add_argument("--storage", help="GTDS 储能电站 发+/充- 电力一览表")
+    c.add_argument("--balance", help="GTDS 8760h 电力平衡结果汇总表（代替 --storage）")
+    c.add_argument("--system", default="西北", help="平衡表中的系统名（配合 --balance）")
     c.add_argument("result", help="run 的结果目录（含 hourly.csv）")
     a = ap.parse_args(argv)
 
     if a.cmd == "compare-gtds":
         import pandas as pd
         from .compare import compare
-        r = compare(a.storage, a.result, a.result)
+        series = None
+        if a.balance:
+            from .balance import gtds_storage, read_balance
+            series = gtds_storage(read_balance(a.balance, a.system)[1])
+        r = compare(a.storage, a.result, a.result, series)
         with pd.option_context("display.width", 200, "display.max_rows", 100):
             print(r["summary"].round(2).to_string(index=False))
             for k in r["monthly"]:
                 print(f"\n[{k}] 月放电量 GWh\n", r["monthly"][k].round(0).T.to_string())
                 print(f"[{k}] 逐时平均出力 GW（放+/充−）\n", r["hourly"][k].round(2).T.to_string())
+        return
+
+    if a.cmd == "balance":
+        from .balance import convert as bconvert
+        info = bconvert(a.balance, a.params, a.out, a.system, a.priority)
+        print(json.dumps(info, ensure_ascii=False, indent=2))
         return
 
     if a.cmd == "gtds":

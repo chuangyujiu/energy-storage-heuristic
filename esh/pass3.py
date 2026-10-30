@@ -48,7 +48,7 @@ class Pass3:
         g = self._gen(W)
         ratio = self.sd.config.valley_ratio or s.eta_rt
         cap_c = np.where(st.pdis[j, W] > EPS, 0.0,
-                         np.minimum(s.power - st.pch[j, W], self.cap_line[W] - g))
+                         np.minimum(s.p_ch - st.pch[j, W], self.cap_line[W] - g))
         cap_c = np.where(self.min_line[W] - g > EPS, 0.0, np.maximum(cap_c, 0.0))   # 有弃电的时段留给第二遍
         x = waterfill(-g, cap_c, np.ones(W.size), A)              # 填谷
         pv = s.rho ** (-(W - W[0]))
@@ -77,7 +77,7 @@ class Pass3:
 
     def _shift(self, j, W):
         s, st = self.sd.storages[j], self.st
-        hi = min(s.power * W.size, s.usable / s.eta_c)
+        hi = min(s.p_ch * W.size, s.usable / s.eta_c)
         if hi <= EPS or self._plan(j, W, 1e-3) is None:
             return
         plan = self._plan(j, W, hi)

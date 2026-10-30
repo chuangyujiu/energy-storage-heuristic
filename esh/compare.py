@@ -45,14 +45,15 @@ def _stats(x: np.ndarray, net_load: np.ndarray, curt0: np.ndarray, month, hour) 
     }
 
 
-def compare(gtds_xlsx, result_dir, out_dir=None) -> dict:
+def compare(gtds_xlsx, result_dir, out_dir=None, gtds_series: dict | None = None) -> dict:
+    """gtds_series 给出时直接使用（如 8760h 平衡表中的储能出力），不读 gtds_xlsx。"""
     res = Path(result_dir)
     h = pd.read_csv(res / "hourly.csv")
     T = len(h)
     month = (pd.Timestamp("2030-01-01") + pd.to_timedelta(np.arange(T), "h")).month
     hour = np.arange(T) % 24
     nl, curt0 = h["净负荷"].to_numpy(), h["弃电_储能投入前"].to_numpy()
-    g = read_gtds_storage(gtds_xlsx)
+    g = gtds_series if gtds_series is not None else read_gtds_storage(gtds_xlsx)
 
     rows, monthly, hourly = [], {}, {}
     for kind, gx in g.items():

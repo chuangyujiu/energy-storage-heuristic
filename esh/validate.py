@@ -58,6 +58,6 @@ def validate(sd: SystemData, st: State, min_line, cap_line, guarantee_mask, ring
         add(f"[{s.name}] 年末 SOC = 年初 SOC", abs(rec[-1] - lift0) < TOL * 10,
             f"年初 {lift0:.3f} / 年末 {rec[-1]:.3f} MWh")
         add(f"[{s.name}] 功率不越限",
-            st.pch[j].max() <= s.power + TOL and st.pdis[j].max() <= s.power + TOL)
+            st.pch[j].max() <= s.p_ch + TOL and st.pdis[j].max() <= s.power + TOL)
         add(f"[{s.name}] 不同时充放", not ((st.pch[j] > TOL) & (st.pdis[j] > TOL)).any())
     return checks

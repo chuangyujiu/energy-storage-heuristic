@@ -94,7 +94,7 @@ class Pass2:
         s, st = self.sd.storages[j], self.st
         S = np.arange(s0, s1 + 1)
         cur = np.maximum(self.min_line[S] - self._gen(S), 0.0)
-        caps = np.where(st.pdis[j, S] > EPS, 0.0, np.maximum(s.power - st.pch[j, S], 0.0))
+        caps = np.where(st.pdis[j, S] > EPS, 0.0, np.maximum(s.p_ch - st.pch[j, S], 0.0))
         caps = np.minimum(caps, cur)
         H = s.usable - st.lift[j, S]
         a_hi = min(float(caps.sum()),

@@ -32,6 +32,21 @@ python -m pytest -q                           # 运行测试
 
 `examples/demo/` 是一套虚构的省级系统示例数据，只用于演示，不代表任何真实电网。
 
+## 导入 GTDS 8760h 电力平衡表
+
+```bash
+python -m esh balance --balance 8760h电力平衡结果汇总表.xlsx --params 机组参数表.xlsx \
+                      --system 西北 --priority flex -o data/nw
+python -m esh run data/nw -o data/results_nw --valley
+python -m esh compare-gtds --balance 8760h电力平衡结果汇总表.xlsx --system 西北 data/results_nw/base
+```
+
+- 负荷取"原始负荷"；风电、光伏取出力 + 调峰弃电；光热、水电按固定出力
+- 火电按机组表展开，最小出力 = min(技术出力, 1) × 单机容量；"机组约束"类型 0 作为分月最大出力比例
+- 参数表没有煤耗差别时用 `--priority` 选开机顺序：`size` 单机容量从大到小，`flex` 技术出力从低到高
+- 储能充电功率 = 功率 × 储能比率（`charge_ratio`），储能侧容量 = 充电功率 × 库容 × √η
+- 备用：负荷备用率、事故旋转备用率、最小备用取负荷表；事故备用不按最大单机计
+
 ## 导入 GTDS 数据
 
 `esh/gtds.py` 把 HUST_GTDS 运行模拟的 Excel 转成上面的输入目录：

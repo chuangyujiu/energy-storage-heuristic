@@ -228,3 +228,25 @@ def test_pass3_flat_plateau_before_valley():
     res = solve(sd)
     assert res.st.pch[0].sum() > 0
     assert_checks(res)
+
+
+def test_charge_ratio_and_monthly_derate():
+    """充电功率 = 功率 × 充电比例；分月最大出力比例折减容量线。"""
+    T = 168
+    nl = np.full(T, 250.0)
+    nl[40] = 320.0
+    nl[34:37] = 150.0
+    bat = Storage("bat", power=5, energy=100, eta_rt=1.0, charge_ratio=2.0)
+    sd = toy(nl, [bat])
+    res = solve(sd)
+    assert res.st.pch[0].max() <= 10.0 + 1e-9 and res.st.pch[0].max() > 5.0
+    assert_checks(res)
+
+    sd2 = toy(np.full(T, 250.0), [])
+    for u in sd2.units:
+        u.max_ratio = (0.5,) * 12                 # 每台只有 50 MW 可用
+    from esh.commitment import Fleet
+    f = Fleet(sd2)
+    order = f.order(0)
+    cap, mn = f.lines(order, 6, np.arange(T))
+    assert cap[0] == pytest.approx(6 * 50 - 100)  # 事故备用仍按最大单机 100 MW

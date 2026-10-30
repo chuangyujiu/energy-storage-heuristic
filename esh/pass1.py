@@ -76,7 +76,7 @@ class Pass1:
                     break
                 idx = o % T
                 av = self._avail(idx, line)
-                pc = s.power - st.pch[j, idx]
+                pc = s.p_ch - st.pch[j, idx]
                 ok = (av > EPS) & (pc > EPS) & (st.pdis[j, idx] <= EPS)
                 if not ok.any():
                     break
