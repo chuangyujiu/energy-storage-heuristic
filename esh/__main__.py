@@ -74,7 +74,27 @@ def main(argv=None):
     pl.add_argument("--balance", help="GTDS 8760h 电力平衡结果汇总表，给出时上下对比")
     pl.add_argument("--system", default="西北")
     pl.add_argument("-o", "--out", default="balance.png")
+    lb = sub.add_parser("lp-bound", help="第二遍完全前瞻上限（线性规划）对照，需要 scipy")
+    lb.add_argument("data", help="输入数据目录")
+    lb.add_argument("--commit-hours", type=int, help="火电开机锁定周期（小时）")
+    lb.add_argument("--objective", choices=["absorb", "displace"], default="displace",
+                    help="absorb=最大化吸收弃电；displace=最大化替代火电（储能放电）")
     a = ap.parse_args(argv)
+
+    if a.cmd == "lp-bound":
+        from .lpbound import compare as lp_compare
+        sd = SystemData.from_dir(a.data)
+        if a.commit_hours:
+            sd.config.commit_hours = a.commit_hours
+        r = lp_compare(sd, a.objective)
+        k = ("启发式放电_MWh", "LP放电_MWh") if a.objective == "displace" else ("启发式吸收_MWh", "LP上限吸收_MWh")
+        h, l = r[k[0]], r[k[1]]
+        print(f"第二遍{'替代火电' if a.objective == 'displace' else '吸收弃电'}：启发式 {h / 1e6:.2f} TWh，"
+              f"LP 上限 {l / 1e6:.2f} TWh，差距 {(l - h) / 1e6:.2f} TWh（{(l - h) / max(l, 1):.1%}）")
+        for name, v in r["分储能"].items():
+            print(f"  {name}：启发式 充 {v['启发式充电'] / 1e6:.2f} / 放 {v['启发式放电'] / 1e6:.2f}，"
+                  f"LP 充 {v['LP充电'] / 1e6:.2f} / 放 {v['LP放电'] / 1e6:.2f} TWh")
+        return
 
     if a.cmd == "plot":
         from .plot import plot
