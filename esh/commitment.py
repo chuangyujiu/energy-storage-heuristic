@@ -40,11 +40,15 @@ class Fleet:
         return cap_line, min_line
 
     def required(self, order: list[int], hours: np.ndarray, n_must: int) -> int:
-        """不考虑储能，按优先级依次开机，直到每小时都满足"净负荷 + 备用"。"""
+        """不考虑储能，按优先级依次开机，直到每小时都满足"净负荷 + 备用"。
+
+        火电出力不低于最小出力线，备用也要在其之上留出，故要求
+        容量线 ≥ max(净负荷, 最小出力线)。
+        """
         nl = self.sd.net_load[hours]
         for n in range(max(n_must, 1), len(order) + 1):
-            cap_line, _ = self.lines(order, n, hours)
-            if (cap_line >= nl).all():
+            cap_line, min_line = self.lines(order, n, hours)
+            if (cap_line >= np.maximum(nl, min_line)).all():
                 return n
         return len(order)
 

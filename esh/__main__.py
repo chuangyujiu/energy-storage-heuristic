@@ -26,7 +26,20 @@ def main(argv=None):
     r.add_argument("-o", "--out", default="results")
     r.add_argument("--mode", choices=["base", "ring", "both"], default="both",
                    help="base=年初 SOC 取下限；ring=环形年；both=两种都跑并比较（默认）")
+    g = sub.add_parser("gtds", help="把 GTDS 的 Excel 数据转换为输入目录")
+    g.add_argument("--units", required=True, help="机组参数表（含系统表、负荷表、电站表、机组表）")
+    g.add_argument("--plants", required=True, help="电站出力一览表（G/U 表）")
+    g.add_argument("--load-dir", required=True, help="日历负荷 L*-8760-*.xlsx 所在目录")
+    g.add_argument("--system", default="西南")
+    g.add_argument("--accident-rate", type=float, default=0.04, help="事故备用率（默认取事故旋转备用）")
+    g.add_argument("-o", "--out", default="data/gtds")
     a = ap.parse_args(argv)
+
+    if a.cmd == "gtds":
+        from .gtds import convert
+        info = convert(a.units, a.plants, a.load_dir, a.out, a.system, a.accident_rate)
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+        return
 
     if a.cmd == "demo":
         print(f"示例数据已写入 {synthetic.make(a.out, a.seed)}")

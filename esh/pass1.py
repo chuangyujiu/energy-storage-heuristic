@@ -125,6 +125,8 @@ class Pass1:
         hours = np.arange(a, b)
         cap, mn = self.fleet.lines(order, n, hours)
         self.cap_line[a:b], self.min_line[a:b] = cap, mn
+        if (cap < mn - TOL).any():            # 停机后留不出备用
+            return False
         st = self.st
         # 环形年：12 月已被跨年配对预留的充电必须仍落在弃电内
         reserved = st.ch_total[a:b] > EPS

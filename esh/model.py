@@ -82,13 +82,14 @@ class Config:
     load_reserve_rate: float = 0.03       # 负荷备用率
     accident_reserve_rate: float = 0.08   # 事故备用率
     ring_max_iter: int = 5                # 环形年最大迭代次数
+    hydro_in_curtail_base: bool = False   # 弃电率分母是否包含水电
 
 
 @dataclass
 class SystemData:
     load: np.ndarray        # 逐时总负荷 MW（用于备用）
     net_load: np.ndarray    # 净负荷 MW
-    renewable: np.ndarray   # 风电+光伏可发功率 MW（用于弃电率）
+    renewable: np.ndarray   # 风电+光伏（可选含水电）可发功率 MW，弃电率的分母
     units: list[ThermalUnit]
     storages: list[Storage]
     config: Config = field(default_factory=Config)
@@ -116,8 +117,11 @@ class SystemData:
         ts = pd.read_csv(path / "timeseries.csv")
         col = lambda c: ts[c].to_numpy(float) if c in ts else np.zeros(len(ts))
         load = col("load")
-        renewable = col("wind") + col("solar")
-        net = load - renewable - col("nuclear") - col("import") - col("hydro")
+        cfg = Config()
+        if (path / "config.json").exists():
+            cfg = Config(**json.loads((path / "config.json").read_text(encoding="utf-8")))
+        renewable = col("wind") + col("solar") + (col("hydro") if cfg.hydro_in_curtail_base else 0)
+        net = load - col("wind") - col("solar") - col("nuclear") - col("import") - col("hydro")
 
         units = []
         for r in pd.read_csv(path / "units.csv").to_dict("records"):
@@ -136,9 +140,6 @@ class SystemData:
                                     float(r.get("soc_max", 1.0)),
                                     float(r.get("self_discharge_day", 0.0))))
 
-        cfg = Config()
-        if (path / "config.json").exists():
-            cfg = Config(**json.loads((path / "config.json").read_text(encoding="utf-8")))
         return cls(load, net, renewable, units, storages, cfg)
 
 

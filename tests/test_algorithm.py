@@ -161,3 +161,15 @@ def test_demo_dataset_validates(tmp_path):
     assert_checks(res)
     curt = [res.stages[k][1].sum() for k in ("before", "pass1", "pass2")]
     assert curt[0] >= curt[1] - 1e-6 >= curt[2] - 2e-6
+
+
+def test_commitment_keeps_reserve_above_min_line():
+    """净负荷为负时也要开够机组，使容量线 ≥ 最小出力线（备用留在最小出力之上）。"""
+    from esh.commitment import Fleet
+    sd = toy(np.full(168, -500.0), [])
+    sd.config.load_reserve_rate = 0.2          # 负荷 1000 × 20% + 最大单机 100 = 300
+    f = Fleet(sd)
+    order = f.order(0)
+    n = f.required(order, np.arange(168), 0)
+    cap, mn = f.lines(order, n, np.arange(168))
+    assert n == 5 and (cap >= mn).all()        # 100n − 300 ≥ 40n → n ≥ 5
