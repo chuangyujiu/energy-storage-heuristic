@@ -105,6 +105,7 @@ class SystemData:
     units: list[ThermalUnit]
     storages: list[Storage]
     config: Config = field(default_factory=Config)
+    components: dict = field(default_factory=dict)   # 各类电源逐时出力（风电、光伏可发等），用于出图
 
     @property
     def T(self) -> int:
@@ -162,7 +163,8 @@ class SystemData:
                                     float(r.get("self_discharge_day", 0.0)),
                                     float(r.get("charge_ratio", 1.0) or 1.0)))
 
-        return cls(load, net, renewable, units, storages, cfg)
+        comps = {k: col(k) for k in ("wind", "solar", "csp", "hydro", "nuclear", "import") if k in ts}
+        return cls(load, net, renewable, units, storages, cfg, comps)
 
 
 def _parse_weeks(s: str) -> list[int]:

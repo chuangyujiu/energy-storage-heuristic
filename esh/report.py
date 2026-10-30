@@ -54,6 +54,10 @@ def write(sd: SystemData, res: Result, out_dir: str | Path) -> dict:
     st, p1 = res.st, res.p1
     hourly = {"小时": np.arange(sd.T), "负荷": sd.load, "净负荷": sd.net_load,
               "容量线": p1.cap_line, "最小出力线": p1.min_line}
+    names = {"wind": "风电可发", "solar": "光伏可发", "csp": "光热", "hydro": "水电",
+             "nuclear": "核电", "import": "外来电"}
+    for k, v in sd.components.items():
+        hourly[names[k]] = v
     for key, name in STAGE_NAMES.items():
         if key not in res.stages:
             continue

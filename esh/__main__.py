@@ -15,6 +15,22 @@ from .model import SystemData
 from .scheduler import solve
 
 
+def _figures(res_dir: Path):
+    """输出典型日电力平衡示意图到 结果目录/figures/（需要 matplotlib）。"""
+    try:
+        from .plot import plot, typical_days
+    except ImportError:
+        return
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        print("  （未安装 matplotlib，跳过出图）")
+        return
+    for name, day in typical_days(res_dir).items():
+        plot(res_dir, res_dir / "figures" / f"{name}_{day}.png", day, title_prefix=f"{name} ")
+    print(f"  示意图：{res_dir / 'figures'}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="esh", description="储能启发式调度算法")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -27,6 +43,7 @@ def main(argv=None):
     r.add_argument("--mode", choices=["base", "ring", "both"], default="both",
                    help="base=年初 SOC 取下限；ring=环形年；both=两种都跑并比较（默认）")
     r.add_argument("--valley", action="store_true", help="第三遍：弃电不足时允许火电在低谷时段充电")
+    r.add_argument("--no-plot", action="store_true", help="不输出电力平衡示意图")
     b = sub.add_parser("balance", help="把 GTDS 8760h 电力平衡表 + 机组参数表转换为输入目录")
     b.add_argument("--balance", required=True, help="8760h 电力平衡结果汇总表")
     b.add_argument("--params", required=True, help="机组参数表（GTDS 格式）")
@@ -48,7 +65,20 @@ def main(argv=None):
     c.add_argument("--balance", help="GTDS 8760h 电力平衡结果汇总表（代替 --storage）")
     c.add_argument("--system", default="西北", help="平衡表中的系统名（配合 --balance）")
     c.add_argument("result", help="run 的结果目录（含 hourly.csv）")
+    pl = sub.add_parser("plot", help="画电力平衡结果示意图（可与 GTDS 平衡表对比）")
+    pl.add_argument("result", nargs="?", help="run 的结果目录（含 hourly.csv）")
+    pl.add_argument("--start", default="01-01", help="起始日期 MM-DD")
+    pl.add_argument("--days", type=int, default=1)
+    pl.add_argument("--stage", help="阶段：第一遍后 / 第二遍后 / 第三遍后（默认取最后一遍）")
+    pl.add_argument("--balance", help="GTDS 8760h 电力平衡结果汇总表，给出时上下对比")
+    pl.add_argument("--system", default="西北")
+    pl.add_argument("-o", "--out", default="balance.png")
     a = ap.parse_args(argv)
+
+    if a.cmd == "plot":
+        from .plot import plot
+        print(plot(a.result, a.out, a.start, a.days, a.stage, a.balance, a.system))
+        return
 
     if a.cmd == "compare-gtds":
         import pandas as pd
@@ -92,6 +122,8 @@ def main(argv=None):
         res = solve(sd, m)
         s = report.write(sd, res, Path(a.out) / m)
         report.print_summary(s)
+        if not a.no_plot:
+            _figures(Path(a.out) / m)
         print(f"  用时 {time.time() - t0:.1f} s，结果目录 {Path(a.out) / m}\n")
         summaries[m] = s
     if len(modes) == 2:

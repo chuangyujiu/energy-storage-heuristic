@@ -32,6 +32,19 @@ python -m pytest -q                           # 运行测试
 
 `examples/demo/` 是一套虚构的省级系统示例数据，只用于演示，不代表任何真实电网。
 
+## 电力平衡示意图
+
+`run` 结束时自动在 `结果目录/figures/` 输出典型日（净负荷最大日、弃电最大日、储能放电最大日）的电力平衡示意图，
+样式仿 GTDS：逐时堆叠火电（储能充电部分以"储能负荷"砖纹画在火电顶部）、水电、光热、储能发电、光伏、风电、
+弃光、弃风、弃水、电力不足，虚线为原始负荷。也可单独画任意时段，或与 GTDS 平衡表上下对比：
+
+```bash
+python -m esh plot data/results_nw/base --start 07-15 --days 7 -o week.png
+python -m esh plot data/results_nw/base --start 01-01 --balance 8760h电力平衡结果汇总表.xlsx -o compare.png
+```
+
+需要 matplotlib 和中文字体（自动选用文泉驿、思源黑体、微软雅黑或黑体）；`run --no-plot` 可跳过出图。
+
 ## 导入 GTDS 8760h 电力平衡表
 
 ```bash
