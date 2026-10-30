@@ -95,6 +95,7 @@ class Config:
     valley_ratio: float | None = None      # 低谷水位 ≤ 比例 × 高峰水位才充放；默认取储能往返效率
     accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
     min_reserve: float = 0.0               # 最小备用 MW
+    commit_hours: int = 168                # 火电开机锁定周期（168 = 按周，24 = 按天）
 
 
 @dataclass
@@ -118,9 +119,11 @@ class SystemData:
         return np.minimum(np.searchsorted(days, np.arange(self.T), side="right") - 1, 11)
 
     def week_bounds(self) -> list[tuple[int, int]]:
-        """按 168 h 分周，最后一周并入不足一周的余数（8760 h → 52 周，末周 192 h）。"""
-        n = max(1, self.T // HOURS_PER_WEEK)
-        b = [(w * HOURS_PER_WEEK, (w + 1) * HOURS_PER_WEEK) for w in range(n)]
+        """开机锁定周期的边界。默认按 168 h 分周，最后一周并入余数（8760 h → 52 周，末周 192 h）；
+        config.commit_hours = 24 时按天。"""
+        P = int(self.config.commit_hours)
+        n = max(1, self.T // P)
+        b = [(w * P, (w + 1) * P) for w in range(n)]
         b[-1] = (b[-1][0], self.T)
         return b
 

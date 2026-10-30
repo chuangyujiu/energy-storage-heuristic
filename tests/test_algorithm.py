@@ -250,3 +250,16 @@ def test_charge_ratio_and_monthly_derate():
     order = f.order(0)
     cap, mn = f.lines(order, 6, np.arange(T))
     assert cap[0] == pytest.approx(6 * 50 - 100)  # 事故备用仍按最大单机 100 MW
+
+
+def test_daily_commitment_stops_units_on_light_days():
+    """按天锁定开机：只有一天有尖峰时，其余各天可以少开机。"""
+    nl = np.full(168, 250.0)
+    nl[40] = 320.0                       # 第 2 天尖峰 → 当天需 5 台，其余 4 台
+    sd = toy(nl, [])
+    res = solve(sd)
+    assert [w.N for w in res.p1.weeks] == [5]
+    sd.config.commit_hours = 24
+    res = solve(sd)
+    assert [w.N for w in res.p1.weeks] == [4, 5, 4, 4, 4, 4, 4]
+    assert_checks(res)

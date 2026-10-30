@@ -85,7 +85,11 @@ class Fleet:
         return len(order)
 
     def initial(self, week: int, a: int, b: int):
-        """初始开机台数 N 与初始目标 k₀ = 按天最大开机台数 − 最小开机台数。"""
+        """初始开机台数 N 与初始目标 k₀ = 按天最大开机台数 − 最小开机台数。
+
+        week 为锁定周期序号；必开机组（如供暖季）按该周期起点所在的周判断。
+        """
+        week = min(a // 168, 51)
         order = self.order(week)
         nm = self.n_floor(week, order)
         N = self.required(order, np.arange(a, b), nm)

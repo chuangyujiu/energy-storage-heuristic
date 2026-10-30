@@ -63,10 +63,13 @@ def solve(sd: SystemData, mode: str = "base") -> Result:
     stages["pass1"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
     p2 = Pass2(sd, p1.st, p1.min_line, p1.cap_line).run()
     stages["pass2"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
-    p3, thermal_ok = None, None
+    # 允许火电充电的小时：保供模式实际用火电充电的小时（窗口可跨入前一周期），以及第三遍充电时段
+    thermal_ok = np.zeros(sd.T, bool)
+    thermal_ok[[c for _, c, _, _, _, tag in p1.st.pairs if tag == "p1-thermal"]] = True
+    p3 = None
     if sd.config.thermal_valley_charging:
         p3 = Pass3(sd, p1.st, p1.min_line, p1.cap_line).run()
         stages["pass3"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
-        thermal_ok = p3.thermal_charge > 1e-6
+        thermal_ok |= p3.thermal_charge > 1e-6
     checks = validate(sd, p1.st, p1.min_line, p1.cap_line, p1.guarantee_mask, ring, thermal_ok)
     return Result(mode, p1, p2, stages, checks, iters, p3)

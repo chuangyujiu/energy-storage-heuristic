@@ -44,6 +44,7 @@ def main(argv=None):
                    help="base=年初 SOC 取下限；ring=环形年；both=两种都跑并比较（默认）")
     r.add_argument("--valley", action="store_true", help="第三遍：弃电不足时允许火电在低谷时段充电")
     r.add_argument("--no-plot", action="store_true", help="不输出电力平衡示意图")
+    r.add_argument("--commit-hours", type=int, help="火电开机锁定周期（小时），如 24 = 按天，默认 168 = 按周")
     b = sub.add_parser("balance", help="把 GTDS 8760h 电力平衡表 + 机组参数表转换为输入目录")
     b.add_argument("--balance", required=True, help="8760h 电力平衡结果汇总表")
     b.add_argument("--params", required=True, help="机组参数表（GTDS 格式）")
@@ -115,6 +116,8 @@ def main(argv=None):
     sd = SystemData.from_dir(a.data)
     if a.valley:
         sd.config.thermal_valley_charging = True
+    if a.commit_hours:
+        sd.config.commit_hours = a.commit_hours
     modes = ["base", "ring"] if a.mode == "both" else [a.mode]
     summaries = {}
     for m in modes:
