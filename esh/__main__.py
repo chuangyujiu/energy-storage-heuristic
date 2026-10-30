@@ -32,6 +32,7 @@ def main(argv=None):
     g.add_argument("--load-dir", required=True, help="日历负荷 L*-8760-*.xlsx 所在目录")
     g.add_argument("--system", default="西南")
     g.add_argument("--accident-rate", type=float, default=0.04, help="事故备用率（默认取事故旋转备用）")
+    g.add_argument("--security", action="store_true", help="计入系统表的保安开机比例")
     g.add_argument("-o", "--out", default="data/gtds")
     c = sub.add_parser("compare-gtds", help="与 GTDS 储能出力对比")
     c.add_argument("--storage", required=True, help="GTDS 储能电站 发+/充- 电力一览表")
@@ -51,7 +52,8 @@ def main(argv=None):
 
     if a.cmd == "gtds":
         from .gtds import convert
-        info = convert(a.units, a.plants, a.load_dir, a.out, a.system, a.accident_rate)
+        info = convert(a.units, a.plants, a.load_dir, a.out, a.system, a.accident_rate,
+                       security=a.security)
         print(json.dumps(info, ensure_ascii=False, indent=2))
         return
 

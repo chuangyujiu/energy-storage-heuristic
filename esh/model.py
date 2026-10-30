@@ -83,6 +83,7 @@ class Config:
     accident_reserve_rate: float = 0.08   # 事故备用率
     ring_max_iter: int = 5                # 环形年最大迭代次数
     hydro_in_curtail_base: bool = False   # 弃电率分母是否包含水电
+    min_online_ratio: float = 0.0         # 保安开机：在运火电容量 ≥ 该比例 × 火电总装机
 
 
 @dataclass

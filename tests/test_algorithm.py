@@ -173,3 +173,13 @@ def test_commitment_keeps_reserve_above_min_line():
     n = f.required(order, np.arange(168), 0)
     cap, mn = f.lines(order, n, np.arange(168))
     assert n == 5 and (cap >= mn).all()        # 100n − 300 ≥ 40n → n ≥ 5
+
+
+def test_security_commitment_floor():
+    """保安开机 50%：6 × 100 MW 中至少开 3 台，即使负荷只需 2 台。"""
+    sd = toy(np.full(168, 50.0), [])
+    sd.config.min_online_ratio = 0.5
+    res = solve(sd)
+    w = res.p1.weeks[0]
+    assert w.N == 3 and w.k == 0
+    assert_checks(res)

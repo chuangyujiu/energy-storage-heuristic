@@ -24,6 +24,15 @@ class Fleet:
     def n_must(self, week: int) -> int:
         return sum(u.is_must_run(week) for u in self.units)
 
+    def n_floor(self, week: int, order: list[int]) -> int:
+        """开机台数下限：必开机组，以及保安开机（按优先级开到在运容量 ≥ 比例 × 总装机）。"""
+        n = self.n_must(week)
+        need = self.cfg.min_online_ratio * self.cap.sum()
+        if need > 0:
+            cum = np.cumsum(self.cap[order])
+            n = max(n, int(np.searchsorted(cum, need - 1e-9)) + 1)
+        return min(n, len(order))
+
     def lines(self, order: list[int], n: int, hours: np.ndarray):
         """按优先级开前 n 台：返回 (容量线, 最小出力线)。
 
@@ -54,7 +63,8 @@ class Fleet:
 
     def initial(self, week: int, a: int, b: int):
         """初始开机台数 N 与初始目标 k₀ = 按天最大开机台数 − 最小开机台数。"""
-        order, nm = self.order(week), self.n_must(week)
+        order = self.order(week)
+        nm = self.n_floor(week, order)
         N = self.required(order, np.arange(a, b), nm)
         daily = [self.required(order, np.arange(s, min(s + 24, b)), nm) for s in range(a, b, 24)]
         k0 = max(daily) - min(daily)

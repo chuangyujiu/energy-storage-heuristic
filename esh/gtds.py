@@ -70,7 +70,8 @@ def read_plant_sheets(path) -> dict[int, np.ndarray]:
 
 
 def convert(units_xlsx, plants_xlsx, load_dir, out_dir, system: str = "西南",
-            accident_rate: float = 0.04, hydro_in_curtail_base: bool = True) -> dict:
+            accident_rate: float = 0.04, hydro_in_curtail_base: bool = True,
+            security: bool = False) -> dict:
     wb = openpyxl.load_workbook(units_xlsx, data_only=True)
     sysrow = next(r for r in _table(wb, "系统表") if r["名称"] == system)
     sid = sysrow["系统ID"]
@@ -131,7 +132,9 @@ def convert(units_xlsx, plants_xlsx, load_dir, out_dir, system: str = "西南",
                        soc_min=0.0, soc_max=1.0, self_discharge_day=0.0)
                   for k, v in storages.items() if v["power"] > 0]).to_csv(out / "storages.csv", index=False)
     cfg = {"load_reserve_rate": float(loadrow["负荷备用"]), "accident_reserve_rate": accident_rate,
-           "hydro_in_curtail_base": hydro_in_curtail_base}
+           "hydro_in_curtail_base": hydro_in_curtail_base,
+           # 系统表"保安开机"：在运火电容量下限占火电总装机的比例
+           "min_online_ratio": float(sysrow["保安开机"] or 0) if security else 0.0}
     (out / "config.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"系统": system, "负荷曲线": curve_name, "年最大负荷MW": float(loadrow["年Pmax"]),
             "火电台数": len(units), "火电容量MW": sum(u["capacity"] for u in units),
