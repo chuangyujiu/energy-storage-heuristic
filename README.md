@@ -37,6 +37,12 @@ python -m pytest -q                           # 运行测试
 `python -m esh run <数据目录> --commit-hours 24`（或 config.json 中 `"commit_hours": 24`）把火电开机方式的锁定周期
 从一周改为一天：第一遍逐日搜索可少开台数 k，weekly.csv 每行为一天。必开机组（如供暖季）仍按所在周判断。
 
+## 第二遍完全前瞻上限对照
+
+`python -m esh lp-bound <数据目录> [--commit-hours 24] [--objective displace|absorb]`：开机方式与第一遍配对固定，
+用线性规划（scipy HiGHS）在全年统一优化第二遍充放电，得到同样约束下的理论上限，与启发式第二遍比较。
+`displace` 最大化替代火电（储能放电），`absorb` 最大化吸收弃电（会偏向效率低的储能，因为损耗也计为吸收）。
+
 ## 电力平衡示意图
 
 `run` 结束时自动在 `结果目录/figures/` 输出典型日（净负荷最大日、弃电最大日、储能放电最大日）的电力平衡示意图，

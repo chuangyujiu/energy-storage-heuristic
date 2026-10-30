@@ -263,3 +263,17 @@ def test_daily_commitment_stops_units_on_light_days():
     res = solve(sd)
     assert [w.N for w in res.p1.weeks] == [4, 5, 4, 4, 4, 4, 4]
     assert_checks(res)
+
+
+def test_lp_bound_not_below_heuristic():
+    """LP 上限不低于启发式第二遍（同一第一遍结果）。"""
+    pytest.importorskip("scipy")
+    from esh.lpbound import compare
+    T = 168
+    nl = np.full(T, 500.0)
+    nl[10:14] = 250.0
+    nl[34:38] = 250.0
+    nl[80] = 900.0
+    sd = toy(nl, [Storage("s", 100, 200, 0.81)], n_units=12)
+    r = compare(sd, "displace")
+    assert r["LP放电_MWh"] >= r["启发式放电_MWh"] - 1e-6
