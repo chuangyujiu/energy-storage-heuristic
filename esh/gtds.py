@@ -104,8 +104,11 @@ def convert(units_xlsx, plants_xlsx, load_dir, out_dir, system: str = "西南",
             key = "抽水蓄能" if typ in PUMPED else "新型储能"
             s = storages[key]
             s["power"] += cap * n
-            s["energy"] += cap * n * float(u["储能库容"])
-            s["eta"] = float(p["储能效率"])
+            eta = float(p["储能效率"])
+            # 储能库容为满功率充电时长；GTDS 发电库容 = 库容 × η（如抽蓄 7 h → 5.25 h）。
+            # 本算法的容量是储能侧电量，充电侧 × η_c = 库容 × √η
+            s["energy"] += cap * n * float(u["储能库容"]) * eta ** 0.5
+            s["eta"] = eta
 
     series = read_plant_sheets(plants_xlsx)
     ts = {k: np.zeros(T) for k in ("wind", "solar", "hydro")}

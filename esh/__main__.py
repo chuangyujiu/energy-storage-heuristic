@@ -33,7 +33,21 @@ def main(argv=None):
     g.add_argument("--system", default="西南")
     g.add_argument("--accident-rate", type=float, default=0.04, help="事故备用率（默认取事故旋转备用）")
     g.add_argument("-o", "--out", default="data/gtds")
+    c = sub.add_parser("compare-gtds", help="与 GTDS 储能出力对比")
+    c.add_argument("--storage", required=True, help="GTDS 储能电站 发+/充- 电力一览表")
+    c.add_argument("result", help="run 的结果目录（含 hourly.csv）")
     a = ap.parse_args(argv)
+
+    if a.cmd == "compare-gtds":
+        import pandas as pd
+        from .compare import compare
+        r = compare(a.storage, a.result, a.result)
+        with pd.option_context("display.width", 200, "display.max_rows", 100):
+            print(r["summary"].round(2).to_string(index=False))
+            for k in r["monthly"]:
+                print(f"\n[{k}] 月放电量 GWh\n", r["monthly"][k].round(0).T.to_string())
+                print(f"[{k}] 逐时平均出力 GW（放+/充−）\n", r["hourly"][k].round(2).T.to_string())
+        return
 
     if a.cmd == "gtds":
         from .gtds import convert
