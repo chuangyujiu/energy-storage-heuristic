@@ -95,6 +95,7 @@ class Config:
     valley_ratio: float | None = None      # 低谷水位 ≤ 比例 × 高峰水位才充放；默认取储能往返效率
     accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
     min_reserve: float = 0.0               # 最小备用 MW
+    fixed_window: int | None = None        # 第一遍前瞻窗口固定为该小时数（不逐步扩大）；None 按储能类别逐步扩大
 
 
 @dataclass

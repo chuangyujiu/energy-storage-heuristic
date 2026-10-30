@@ -67,7 +67,8 @@ class Pass1:
             return R0
         rest = R0 - R
         block = -10 ** 9                      # SOC 已顶满的最晚时刻，充电位置必须在其之后
-        for w in s.windows:                   # 前瞻窗口逐步扩大
+        fixed = self.sd.config.fixed_window
+        for w in ((fixed,) if fixed else s.windows):   # 前瞻窗口逐步扩大，或固定
             lo = d - w if self.ring else max(0, d - w)
             offs = np.arange(lo, d)
             while R > EPS:

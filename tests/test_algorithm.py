@@ -250,3 +250,17 @@ def test_charge_ratio_and_monthly_derate():
     order = f.order(0)
     cap, mn = f.lines(order, 6, np.arange(T))
     assert cap[0] == pytest.approx(6 * 50 - 100)  # 事故备用仍按最大单机 100 MW
+
+
+def test_fixed_window_reaches_far_curtailment():
+    """固定 7 天窗口时，日储能也能用到 72 h 以外的弃电。"""
+    T = 336
+    nl = np.full(T, 250.0)
+    nl[200] = 320.0                 # 第 2 周的尖峰
+    nl[100:103] = 150.0             # 尖峰前约 100 h 的弃电（超出日储能 72 h 窗口）
+    sd = toy(nl, [Storage("bat", 50, 100, 1.0)])
+    assert solve(sd).p1.weeks[1].k == 0
+    sd.config.fixed_window = 168
+    res = solve(sd)
+    assert res.p1.weeks[1].k == 1
+    assert_checks(res)
