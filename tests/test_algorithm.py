@@ -290,6 +290,7 @@ def test_fixed_commitment_storage_only():
     sd = toy(nl, [Storage("bat", 50, 200, 1.0)])
     sd.config.min_reserve = 0
     res = solve_fixed(sd, np.full(T, 400.0), np.full(T, 200.0))
-    assert res.st.pdis[0, 19] == pytest.approx(20.0)
+    peak = sum(p[4] for p in res.st.pairs if p[2] == 19 and p[5] == "p1")
+    assert peak == pytest.approx(20.0)                    # 第一遍只削掉超出可用容量的 20
     assert res.stages["pass2"][2].sum() == pytest.approx(0.0, abs=1e-6)
     assert_checks(res)
