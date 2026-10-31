@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .model import EPS, SystemData, storage_order
+from .model import EPS, SystemData, storage_order, storage_weights
 from .state import State
 from .waterfill import waterfill
 
@@ -45,7 +45,15 @@ class Pass2:
         # 放电区间：第 i 段弃电结束 → 第 i+1 段弃电开始（末段到年末）
         gaps = [(segs[i][1] + 1, (segs[i + 1][0] - 1) if i + 1 < len(segs) else self.T - 1)
                 for i in range(len(segs))]
+        share = self.sd.config.storage_share
+        w = storage_weights(self.sd.storages, share) if share != "priority" else None
         for i, (s0, s1) in enumerate(segs):
+            if w is not None:
+                # 按比例同时分担：各储能先只用本段弃电的相应份额，充不进的再按短时优先补位
+                S = np.arange(s0, s1 + 1)
+                cur0 = np.maximum(self.min_line[S] - self._gen(S), 0.0)
+                for j in self.order_s:
+                    self._transfer(j, s0, s1, gaps[i:], i, limit=cur0 * w[j])
             for j in self.order_s:
                 self._transfer(j, s0, s1, gaps[i:], i)
         return self
@@ -90,12 +98,13 @@ class Pass2:
             return None
         return x, dis, tau, lift
 
-    def _transfer(self, j, s0, s1, gaps, seg_id):
+    def _transfer(self, j, s0, s1, gaps, seg_id, limit=None):
+        """limit：本次充电的逐时上限（按比例分担时的份额），None 表示不另设上限。"""
         s, st = self.sd.storages[j], self.st
         S = np.arange(s0, s1 + 1)
         cur = np.maximum(self.min_line[S] - self._gen(S), 0.0)
         caps = np.where(st.pdis[j, S] > EPS, 0.0, np.maximum(s.p_ch - st.pch[j, S], 0.0))
-        caps = np.minimum(caps, cur)
+        caps = np.minimum(caps, cur if limit is None else np.minimum(cur, limit))
         H = s.usable - st.lift[j, S]
         a_hi = min(float(caps.sum()),
                    max(float(H.max()), 0.0) / s.eta_c / s.rho ** S.size)

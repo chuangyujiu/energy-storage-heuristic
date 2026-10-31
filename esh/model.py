@@ -77,6 +77,12 @@ class Storage:
         return DAILY_WINDOWS if self.kind == "daily" else WEEKLY_WINDOWS
 
 
+def storage_weights(storages: list[Storage], share: str) -> np.ndarray:
+    """按比例同时分担时各储能的份额：energy 按放电侧可用电量，power 按额定放电功率。"""
+    w = np.array([s.usable * s.eta_d if share == "energy" else s.power for s in storages], float)
+    return w / w.sum() if w.sum() > 0 else w
+
+
 def storage_order(storages: list[Storage]) -> list[int]:
     """调用顺序：短时优先（日储能 → 周储能），同类内效率优先。"""
     return sorted(range(len(storages)),
@@ -96,6 +102,7 @@ class Config:
     accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
     min_reserve: float = 0.0               # 最小备用 MW
     commit_hours: int = 168                # 火电开机锁定周期（168 = 按周，24 = 按天）
+    storage_share: str = "priority"        # 多类储能分工：priority 短时优先；energy / power 按电量 / 功率比例同时分担
 
 
 @dataclass

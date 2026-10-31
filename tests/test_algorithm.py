@@ -294,3 +294,16 @@ def test_fixed_commitment_storage_only():
     assert peak == pytest.approx(20.0)                    # 第一遍只削掉超出可用容量的 20
     assert res.stages["pass2"][2].sum() == pytest.approx(0.0, abs=1e-6)
     assert_checks(res)
+
+
+def test_energy_share_splits_peak_across_storages():
+    """按电量比例分担：同一削峰需求由两类储能按可用电量比例同时承担。"""
+    sd = toy(_peak_week(), [Storage("a", 50, 100, 1.0), Storage("b", 50, 300, 1.0)])
+    sd.config.storage_share = "energy"
+    res = solve(sd)
+    p1 = {}
+    for j, c, d, e, ed, tag in res.st.pairs:
+        if d == 40 and tag == "p1":
+            p1[j] = p1.get(j, 0) + ed
+    assert p1[0] == pytest.approx(5.0) and p1[1] == pytest.approx(15.0)   # 20 按 100:300 分
+    assert_checks(res)

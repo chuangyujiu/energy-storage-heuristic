@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .commitment import Fleet
-from .model import EPS, SystemData, storage_order
+from .model import EPS, SystemData, storage_order, storage_weights
 from .state import State
 from .waterfill import waterfill
 
@@ -53,6 +53,11 @@ class Pass1:
         return np.maximum(a, 0.0)
 
     def _pair(self, d: int, R: float, line: np.ndarray, tag: str) -> float:
+        share = self.sd.config.storage_share
+        if share != "priority":
+            # 按比例同时分担：各储能先承担自己的份额，配不满的部分再按短时优先补位
+            w = storage_weights(self.sd.storages, share)
+            R = sum(self._pair_one(j, d, R * w[j], line, tag) for j in self.order_s if w[j] > 0)
         for j in self.order_s:
             if R <= EPS:
                 break
