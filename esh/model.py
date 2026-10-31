@@ -102,7 +102,8 @@ class Config:
     accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
     min_reserve: float = 0.0               # 最小备用 MW
     commit_hours: int = 168                # 火电开机锁定周期（168 = 按周，24 = 按天）
-    storage_share: str = "priority"        # 多类储能分工：priority 短时优先；energy / power 按电量 / 功率比例同时分担
+    storage_share: str = "priority"        # 多类储能分工：priority 短时优先；energy / power 按电量 / 功率比例同时分担；
+                                           # dynamic 按当时剩余可放电量（放电）/ 剩余可充空间（充电）比例分担
 
 
 @dataclass

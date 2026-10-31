@@ -53,8 +53,13 @@ class Pass2:
         if self.ring and segs:
             gaps[-1] = (segs[-1][1] + 1, self.T + segs[0][0] - 1)   # 跨年延续到 1 月第一段弃电
         share = self.sd.config.storage_share
-        w = storage_weights(self.sd.storages, share) if share != "priority" else None
+        w = storage_weights(self.sd.storages, share) if share not in ("priority", "dynamic") else None
         for i, (s0, s1) in enumerate(segs):
+            if share == "dynamic":
+                # 按剩余可充空间分担：本段开始时各储能可用容量减去已占用部分
+                room = np.array([max(s.usable - self.st.lift[j, s0:s1 + 1].max(), 0.0)
+                                 for j, s in enumerate(self.sd.storages)])
+                w = room / room.sum() if room.sum() > EPS else storage_weights(self.sd.storages, "energy")
             if w is not None:
                 # 按比例同时分担：各储能先只用本段弃电的相应份额，充不进的再按短时优先补位
                 S = np.arange(s0, s1 + 1)

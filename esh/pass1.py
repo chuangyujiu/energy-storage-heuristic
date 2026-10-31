@@ -56,13 +56,23 @@ class Pass1:
         share = self.sd.config.storage_share
         if share != "priority":
             # 按比例同时分担：各储能先承担自己的份额，配不满的部分再按短时优先补位
-            w = storage_weights(self.sd.storages, share)
+            w = self._dynamic_weights(d) if share == "dynamic" else storage_weights(self.sd.storages, share)
             R = sum(self._pair_one(j, d, R * w[j], line, tag) for j in self.order_s if w[j] > 0)
         for j in self.order_s:
             if R <= EPS:
                 break
             R = self._pair_one(j, d, R, line, tag)
         return R
+
+    def _dynamic_weights(self, d: int) -> np.ndarray:
+        """按剩余可放电量分担：本放电时段（上一段弃电之后到 d 之前）已安排的放电从满库可放电量中扣除。"""
+        lo = max(0, d - 72)
+        hrs = np.arange(lo, d)
+        cur = (self.min_line[hrs] - self.nl[hrs]) > EPS          # 有弃电的小时（按当前开机线）
+        a = int(hrs[np.nonzero(cur)[0][-1]]) + 1 if cur.any() else lo
+        rem = np.array([max(s.usable * s.eta_d - self.st.pdis[j, a:d].sum(), 0.0)
+                        for j, s in enumerate(self.sd.storages)])
+        return rem / rem.sum() if rem.sum() > EPS else storage_weights(self.sd.storages, "energy")
 
     def _pair_one(self, j: int, d: int, R0: float, line: np.ndarray, tag: str) -> float:
         """为第 d 小时的削峰需求 R0 在储能 j 上往回找充电位置，返回未满足部分。"""

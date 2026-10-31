@@ -45,7 +45,7 @@ def main(argv=None):
     r.add_argument("--valley", action="store_true", help="第三遍：弃电不足时允许火电在低谷时段充电")
     r.add_argument("--no-plot", action="store_true", help="不输出电力平衡示意图")
     r.add_argument("--commit-hours", type=int, help="火电开机锁定周期（小时），如 24 = 按天，默认 168 = 按周")
-    r.add_argument("--share", choices=["priority", "energy", "power"],
+    r.add_argument("--share", choices=["priority", "energy", "power", "dynamic"],
                    help="多类储能分工：priority 短时优先（默认）；energy / power 按电量 / 功率比例同时分担")
     b = sub.add_parser("balance", help="把 GTDS 8760h 电力平衡表 + 机组参数表转换为输入目录")
     b.add_argument("--balance", required=True, help="8760h 电力平衡结果汇总表")
@@ -88,7 +88,7 @@ def main(argv=None):
     fc.add_argument("--system", default="西北")
     fc.add_argument("--no-thermal-reserve", action="store_true", help="火电不承担备用（容量线 = 在运可用容量）")
     fc.add_argument("--valley", action="store_true", help="加第三遍")
-    fc.add_argument("--share", choices=["priority", "energy", "power"], help="多类储能分工")
+    fc.add_argument("--share", choices=["priority", "energy", "power", "dynamic"], help="多类储能分工")
     fc.add_argument("--ring", action="store_true", help="环形年（第 1 周可绕回 12 月末的剩余弃电）")
     fc.add_argument("-o", "--out", default="results_gtds_commit")
     a = ap.parse_args(argv)

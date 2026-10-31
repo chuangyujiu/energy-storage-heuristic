@@ -324,3 +324,12 @@ def test_pass2_ring_wraps_year_end():
     assert st.pch[0].sum() == pytest.approx(200.0)
     assert st.pdis[0, :10].sum() > 0                                 # 放到年初
     assert st.lift[0, -1] == pytest.approx(st.pdis[0].sum())        # 年末存量 = 年初放出的电
+
+
+def test_dynamic_share_runs_and_validates():
+    """按剩余电量动态分担：结果通过全部校验。"""
+    sd = toy(_peak_week(), [Storage("a", 50, 100, 1.0), Storage("b", 50, 300, 0.81)])
+    sd.config.storage_share = "dynamic"
+    res = solve(sd)
+    assert res.p1.weeks[0].k == 1
+    assert_checks(res)
