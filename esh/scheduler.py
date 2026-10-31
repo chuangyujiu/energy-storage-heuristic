@@ -61,7 +61,7 @@ def solve(sd: SystemData, mode: str = "base") -> Result:
     ring = mode == "ring"
     stages = {"before": _baseline(sd)}
     stages["pass1"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
-    p2 = Pass2(sd, p1.st, p1.min_line, p1.cap_line).run()
+    p2 = Pass2(sd, p1.st, p1.min_line, p1.cap_line, ring=ring).run()
     stages["pass2"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
     # 允许火电充电的小时：保供模式实际用火电充电的小时（窗口可跨入前一周期），以及第三遍充电时段
     thermal_ok = np.zeros(sd.T, bool)

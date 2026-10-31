@@ -89,6 +89,7 @@ def main(argv=None):
     fc.add_argument("--no-thermal-reserve", action="store_true", help="火电不承担备用（容量线 = 在运可用容量）")
     fc.add_argument("--valley", action="store_true", help="加第三遍")
     fc.add_argument("--share", choices=["priority", "energy", "power"], help="多类储能分工")
+    fc.add_argument("--ring", action="store_true", help="环形年（第 1 周可绕回 12 月末的剩余弃电）")
     fc.add_argument("-o", "--out", default="results_gtds_commit")
     a = ap.parse_args(argv)
 
@@ -102,7 +103,7 @@ def main(argv=None):
             sd.config.storage_share = a.share
         if a.no_thermal_reserve:
             sd.config.load_reserve_rate = sd.config.accident_reserve_rate = sd.config.min_reserve = 0
-        res = solve_fixed(sd, avail, pmn)
+        res = solve_fixed(sd, avail, pmn, ring=a.ring)
         out = Path(a.out)
         s = report.write(sd, res, out)
         tab.to_csv(out / "gtds_commitment.csv", index=False, encoding="utf-8-sig")

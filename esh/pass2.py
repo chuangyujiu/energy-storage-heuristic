@@ -5,6 +5,9 @@
 开始，区间内对火电出力做削峰灌水，每小时不超过放电空间（火电出力 − 最小出力线）；
 放不完的电量延到下一个区间。
 
+环形年（ring=True）：最后一段弃电的放电区间跨过年末，延续到 1 月 1 日第一段弃电开始；
+年末仍存着的电量即为年初 SOC。跨年小时用"展开时刻"（≥ T）表示，访问数组时对 T 取模。
+
 自损耗是线性的，故用"贴现电量"记账：t 时刻的 1 MWh 记为 ρ^(−t) MWh，
 充入与放出的贴现电量相等即闭合。
 """
@@ -27,8 +30,10 @@ def _segments(mask: np.ndarray) -> list[tuple[int, int]]:
 
 
 class Pass2:
-    def __init__(self, sd: SystemData, st: State, min_line: np.ndarray, cap_line: np.ndarray):
+    def __init__(self, sd: SystemData, st: State, min_line: np.ndarray, cap_line: np.ndarray,
+                 ring: bool = False):
         self.sd, self.st = sd, st
+        self.ring = ring
         self.min_line, self.cap_line = min_line, cap_line
         self.nl = sd.net_load
         self.T = sd.T
@@ -45,6 +50,8 @@ class Pass2:
         # 放电区间：第 i 段弃电结束 → 第 i+1 段弃电开始（末段到年末）
         gaps = [(segs[i][1] + 1, (segs[i + 1][0] - 1) if i + 1 < len(segs) else self.T - 1)
                 for i in range(len(segs))]
+        if self.ring and segs:
+            gaps[-1] = (segs[-1][1] + 1, self.T + segs[0][0] - 1)   # 跨年延续到 1 月第一段弃电
         share = self.sd.config.storage_share
         w = storage_weights(self.sd.storages, share) if share != "priority" else None
         for i, (s0, s1) in enumerate(segs):
@@ -71,10 +78,11 @@ class Pass2:
                 break
             if i1 < i0:
                 continue
-            D = np.arange(i0, i1 + 1)
-            g = self._gen(D)
-            cap = np.minimum(g - self.min_line[D], s.power - st.pdis[j, D])
-            cap = np.where(st.ch_total[D] > EPS, 0.0, np.maximum(cap, 0.0))
+            D = np.arange(i0, i1 + 1)                          # 展开时刻（环形年可 ≥ T）
+            Di = D % self.T
+            g = self._gen(Di)
+            cap = np.minimum(g - self.min_line[Di], s.power - st.pdis[j, Di])
+            cap = np.where(st.ch_total[Di] > EPS, 0.0, np.maximum(cap, 0.0))
             wgt = s.rho ** (-(D - s0)) / s.eta_d
             tot = float(np.dot(cap, wgt))
             if tot <= rem:
@@ -94,7 +102,7 @@ class Pass2:
             flow[D - s0] -= y * wgt
         lift = np.maximum(np.cumsum(flow) * s.rho ** (tau - s0), 0.0)
         lift[-1] = 0.0 if abs(lift[-1]) < 1e-6 else lift[-1]
-        if (st.lift[j, tau] + lift > s.usable + TOL).any():
+        if (st.lift[j, tau % self.T] + lift > s.usable + TOL).any():
             return None
         return x, dis, tau, lift
 
@@ -127,10 +135,10 @@ class Pass2:
         st.ch_total[S] += x
         e_dis = 0.0
         for D, y, _ in dis:
-            st.pdis[j, D] += y
-            st.dis_total[D] += y
+            np.add.at(st.pdis[j], D % self.T, y)
+            np.add.at(st.dis_total, D % self.T, y)
             e_dis += float(y.sum())
-        st.lift[j, tau] += lift
+        np.add.at(st.lift[j], tau % self.T, lift)
         if x.sum() > EPS:
             self.transfers.append(dict(segment=seg_id, storage=s.name, start=int(s0), end=int(s1),
                                        charge=float(x.sum()), discharge=e_dis,

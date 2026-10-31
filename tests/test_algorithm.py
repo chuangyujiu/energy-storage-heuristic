@@ -116,7 +116,9 @@ def test_ring_year_wraps_december_curtailment():
     base, ring = solve(sd, "base"), solve(sd, "ring")
     assert base.p1.weeks[0].k == 0
     assert ring.p1.weeks[0].k == 1
-    assert ring.st.lift[0, -1] == pytest.approx(20.0)      # 跨年配对电量即年初 SOC
+    # 跨年电量即年初 SOC：第一遍削峰配对 20，第二遍把 12 月末剩余的 10 MWh 弃电带到年初
+    assert sum(p[3] for p in ring.st.pairs if p[1] > p[2]) == pytest.approx(20.0)
+    assert ring.st.lift[0, -1] == pytest.approx(30.0)
     assert_checks(base)
     assert_checks(ring)
 
@@ -307,3 +309,18 @@ def test_energy_share_splits_peak_across_storages():
             p1[j] = p1.get(j, 0) + ed
     assert p1[0] == pytest.approx(5.0) and p1[1] == pytest.approx(15.0)   # 20 按 100:300 分
     assert_checks(res)
+
+
+def test_pass2_ring_wraps_year_end():
+    """环形年第二遍：年末弃电充的电可放到 1 月 1 日凌晨，年末 SOC = 年初 SOC。"""
+    T = 168
+    nl = np.full(T, 500.0)
+    nl[T - 4:] = 250.0              # 年末最后 4 小时弃电（最小出力线 300），之后年内再无放电时段
+    st = State(T, 1)
+    sd = toy(nl, [Storage("s", 100, 200, 1.0)], n_units=12)
+    base = Pass2(sd, State(T, 1), np.full(T, 300.0), np.full(T, 2000.0)).run()
+    assert base.st.pch[0].sum() == pytest.approx(0.0, abs=1e-6)     # 不跨年时年末充的电放不出去
+    ring = Pass2(sd, st, np.full(T, 300.0), np.full(T, 2000.0), ring=True).run()
+    assert st.pch[0].sum() == pytest.approx(200.0)
+    assert st.pdis[0, :10].sum() > 0                                 # 放到年初
+    assert st.lift[0, -1] == pytest.approx(st.pdis[0].sum())        # 年末存量 = 年初放出的电

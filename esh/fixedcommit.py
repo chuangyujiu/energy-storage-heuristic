@@ -90,9 +90,15 @@ def infer_commitment(balance_xlsx, params_xlsx, system: str = "西北"):
 class FixedPass1(Pass1):
     """开机方式固定（逐时可用容量与最小出力线给定）的第一遍：只为削峰需求配对。"""
 
-    def __init__(self, sd, avail, pmin_line):
-        super().__init__(sd)
+    def __init__(self, sd, avail, pmin_line, ring_prev: "FixedPass1 | None" = None):
+        super().__init__(sd, ring_prev)
         self.avail, self.pmin_line = avail, pmin_line
+
+    def _wrap(self, d: int):
+        """环形年：第 1 周的需求可绕回上一轮 12 月末的剩余弃电（扣除上一轮已用的充电）。"""
+        if self.ring:
+            w = slice(self.T - 168, self.T)
+            self.pre_used[w] = self.ring_prev.st.ch_total[w] if d < 168 else 0.0
 
     def run(self) -> "FixedPass1":
         cfg, load = self.sd.config, self.sd.load
@@ -103,10 +109,12 @@ class FixedPass1(Pass1):
         demand = np.maximum(self.nl - self.cap_line, 0.0)
         unmet = {}
         for d in np.nonzero(demand > EPS)[0]:
+            self._wrap(int(d))
             R = self._pair(int(d), float(demand[d]), self.min_line, "p1")
             if R > EPS:
                 unmet[int(d)] = R
         for d, R in sorted(unmet.items()):          # 配不满：放开火电充电，仍不足记缺电
+            self._wrap(d)
             R = self._pair(d, R, self.cap_line, "p1-thermal")
             if R > EPS:
                 self.st.shortage[d] += R
@@ -114,21 +122,35 @@ class FixedPass1(Pass1):
             a, b = 24 * i, 24 * (i + 1)
             g = any(a <= d < b for d in unmet)
             self.weeks.append(WeekResult(i, a, b, 0, 0, 0, 0.0, g, float(self.st.shortage[a:b].sum()), 0))
+        self._wrap(self.T)
         return self
 
 
-def solve_fixed(sd, avail, pmin_line):
-    """与 scheduler.solve 相同的后续流程（第二遍、可选第三遍、校验），开机固定为给定方案。"""
+def solve_fixed(sd, avail, pmin_line, ring: bool = False):
+    """与 scheduler.solve 相同的后续流程（第二遍、可选第三遍、校验），开机固定为给定方案。
+
+    ring=True 为环形年：先按基准方案跑第一遍，再让第 1 周绕回上一轮 12 月末的剩余弃电重跑，
+    直到 12 月末的充电不再变化；跨年配对的电量即为年初 SOC。
+    """
     from .pass2 import Pass2
     from .pass3 import Pass3
     from .scheduler import Result
     from .validate import dispatch, validate
     p1 = FixedPass1(sd, avail, pmin_line).run()
+    iters = 0
+    if ring:
+        w = slice(sd.T - 168, sd.T)
+        for iters in range(1, sd.config.ring_max_iter + 1):
+            nxt = FixedPass1(sd, avail, pmin_line, ring_prev=p1).run()
+            done = np.allclose(nxt.st.ch_total[w], p1.st.ch_total[w], atol=1e-3)
+            p1 = nxt
+            if done:
+                break
     raw = sd.net_load
     stages = {"before": (np.clip(raw, p1.min_line, np.maximum(p1.cap_line, p1.min_line)),
                          np.maximum(p1.min_line - raw, 0.0), np.maximum(raw - p1.cap_line, 0.0))}
     stages["pass1"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
-    p2 = Pass2(sd, p1.st, p1.min_line, p1.cap_line).run()
+    p2 = Pass2(sd, p1.st, p1.min_line, p1.cap_line, ring=ring).run()
     stages["pass2"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
     thermal_ok = np.zeros(sd.T, bool)
     thermal_ok[[c for _, c, _, _, _, tag in p1.st.pairs if tag == "p1-thermal"]] = True
@@ -137,5 +159,5 @@ def solve_fixed(sd, avail, pmin_line):
         p3 = Pass3(sd, p1.st, p1.min_line, p1.cap_line).run()
         stages["pass3"] = dispatch(sd, p1.st, p1.min_line, p1.cap_line)
         thermal_ok |= p3.thermal_charge > 1e-6
-    checks = validate(sd, p1.st, p1.min_line, p1.cap_line, p1.guarantee_mask, False, thermal_ok)
-    return Result("gtds-commit", p1, p2, stages, checks, 0, p3)
+    checks = validate(sd, p1.st, p1.min_line, p1.cap_line, p1.guarantee_mask, ring, thermal_ok)
+    return Result("gtds-commit-ring" if ring else "gtds-commit", p1, p2, stages, checks, iters, p3)

@@ -86,7 +86,7 @@ def write(sd: SystemData, res: Result, out_dir: str | Path) -> dict:
 
 
 def print_summary(s: dict):
-    print(f"== 方案：{s['方案']}" + (f"（环形年迭代 {s['环形年迭代次数']} 次）" if s["方案"] == "ring" else ""))
+    print(f"== 方案：{s['方案']}" + (f"（环形年迭代 {s['环形年迭代次数']} 次）" if str(s["方案"]).endswith("ring") else ""))
     for name in STAGE_NAMES.values():
         if name not in s:
             continue
