@@ -17,6 +17,7 @@ class Fleet:
         self.ratio = np.array([u.max_ratio if u.max_ratio else (1.0,) * 12 for u in self.units])
         self.month = sd.month
         self._cache: dict = {}
+        self.maint = self._schedule_maintenance() if self.cfg.maintenance else None
 
     def order(self, week: int) -> list[int]:
         """开机优先级：本周必开机组在前，其余按煤耗从低到高。"""
@@ -84,13 +85,54 @@ class Fleet:
                 return n
         return len(order)
 
+    def _schedule_maintenance(self) -> np.ndarray:
+        """等备用法安排检修，返回 (机组, 周期) 的检修标记。
+
+        每个开机周期的火电备用 = 可用容量 − max(净负荷 + 备用需求)。从大机组开始逐台安排：
+        检修时长按周期换算（向上取整），在同时检修容量不超过 maint_max_ratio × 总装机的前提下，
+        选检修期间最小备用最大的连续时段（并列取最早），排完扣除该机组容量。
+        """
+        from numpy.lib.stride_tricks import sliding_window_view as win
+        bounds = self.sd.week_bounds()
+        P, n = len(bounds), len(self.units)
+        cfg, nl, load = self.cfg, self.sd.net_load, self.sd.load
+        need, mon = np.zeros(P), np.zeros(P, int)
+        for p, (a, b) in enumerate(bounds):
+            res = load[a:b] * cfg.load_reserve_rate + load[a:b] * cfg.accident_reserve_rate
+            need[p] = (nl[a:b] + np.maximum(res, cfg.min_reserve)).max()
+            mon[p] = self.month[(a + b) // 2]
+        avail_u = self.cap[:, None] * self.ratio[:, mon]              # (机组, 周期)
+        margin = avail_u.sum(0) - need
+        out = np.zeros(P)
+        limit = cfg.maint_max_ratio * self.cap.sum()
+        mask = np.zeros((n, P), bool)
+        hours = self.sd.config.commit_hours
+        for u in np.argsort(-self.cap, kind="stable"):
+            days = self.units[u].maint_days
+            if days <= 0:
+                continue
+            L = min(P, int(np.ceil(days * 24 / hours)))
+            ok = win(out, L).max(1) + self.cap[u] <= limit + 1e-6
+            if not ok.any():
+                continue
+            score = win(margin - avail_u[u], L).min(1)
+            score[~ok] = -np.inf
+            s = int(np.argmax(score))
+            mask[u, s:s + L] = True
+            margin[s:s + L] -= avail_u[u, s:s + L]
+            out[s:s + L] += self.cap[u]
+        return mask
+
     def initial(self, week: int, a: int, b: int):
         """初始开机台数 N 与初始目标 k₀ = 按天最大开机台数 − 最小开机台数。
 
-        week 为锁定周期序号；必开机组（如供暖季）按该周期起点所在的周判断。
+        week 为锁定周期序号；必开机组（如供暖季）按该周期起点所在的周判断；检修中的机组不参与开机。
         """
+        period = week
         week = min(a // 168, 51)
         order = self.order(week)
+        if self.maint is not None:
+            order = [u for u in order if not self.maint[u, period]]
         nm = self.n_floor(week, order)
         N = self.required(order, np.arange(a, b), nm)
         daily = [self.required(order, np.arange(s, min(s + 24, b)), nm) for s in range(a, b, 24)]

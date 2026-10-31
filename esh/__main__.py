@@ -45,6 +45,7 @@ def main(argv=None):
     r.add_argument("--valley", action="store_true", help="第三遍：弃电不足时允许火电在低谷时段充电")
     r.add_argument("--no-plot", action="store_true", help="不输出电力平衡示意图")
     r.add_argument("--commit-hours", type=int, help="火电开机锁定周期（小时），如 24 = 按天，默认 168 = 按周")
+    r.add_argument("--maintenance", action="store_true", help="安排火电检修（等备用法，每台按机组表检修天数）")
     r.add_argument("--share", choices=["priority", "energy", "power", "dynamic"],
                    help="多类储能分工：priority 短时优先（默认）；energy / power 按电量 / 功率比例同时分担")
     b = sub.add_parser("balance", help="把 GTDS 8760h 电力平衡表 + 机组参数表转换为输入目录")
@@ -167,6 +168,8 @@ def main(argv=None):
         sd.config.thermal_valley_charging = True
     if a.commit_hours:
         sd.config.commit_hours = a.commit_hours
+    if a.maintenance:
+        sd.config.maintenance = True
     if a.share:
         sd.config.storage_share = a.share
     modes = ["base", "ring"] if a.mode == "both" else [a.mode]

@@ -100,7 +100,8 @@ def convert(balance_xlsx, params_xlsx, out_dir, system: str = "西北",
             score = -cap if priority == "size" else tech
             for k in range(n):
                 th.append(dict(name=f"{u['名称']}#{k + 1}", capacity=cap, pmin=round(min(tech, 1.0) * cap, 3),
-                               coal=score, must_run=False, must_run_weeks="", max_ratio=ratio))
+                               coal=score, must_run=False, must_run_weeks="", max_ratio=ratio,
+                               maint_days=float(u.get("检修天数") or 0)))
         elif p["类型"] in (PUMPED, BATTERY):
             key = "抽水蓄能" if p["类型"] == PUMPED else "新型储能"
             eta, cr = float(p["储能效率"]), float(p["储能比率"] or 1.0)
@@ -120,6 +121,7 @@ def convert(balance_xlsx, params_xlsx, out_dir, system: str = "西北",
            "accident_largest_unit": False,
            "min_reserve": float(loadrow["最小备用"]),
            "min_online_ratio": float(sysrow["保安开机"] or 0),
+           "maint_max_ratio": float(sysrow["火电检修max"] or 0.7),
            "hydro_in_curtail_base": True}
     (out / "config.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"系统": system, "负荷TWh": ts["load"].sum() / 1e6, "风电TWh": ts["wind"].sum() / 1e6,

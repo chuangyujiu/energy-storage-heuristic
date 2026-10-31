@@ -24,6 +24,7 @@ class ThermalUnit:
     must_run: bool = False          # 是否必开
     must_run_weeks: tuple | None = None  # 仅在这些周（0 起）必开，如供暖季；None 表示 must_run 全年有效
     max_ratio: tuple | None = None  # 分月最大出力比例（12 个值，如供暖季 0.8）；None 表示全年为 1
+    maint_days: float = 0.0         # 年检修天数（0 表示不安排检修）
 
     def is_must_run(self, week: int) -> bool:
         if not self.must_run:
@@ -102,6 +103,8 @@ class Config:
     accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
     min_reserve: float = 0.0               # 最小备用 MW
     commit_hours: int = 168                # 火电开机锁定周期（168 = 按周，24 = 按天）
+    maintenance: bool = False              # 是否安排火电检修（等备用法）
+    maint_max_ratio: float = 0.7           # 同时检修容量上限占火电总装机比例（GTDS 系统表"火电检修max"）
     storage_share: str = "priority"        # 多类储能分工：priority 短时优先；energy / power 按电量 / 功率比例同时分担；
                                            # dynamic 按当时剩余可放电量（放电）/ 剩余可充空间（充电）比例分担
 
@@ -163,8 +166,10 @@ class SystemData:
                 weeks = None
             mr = r.get("max_ratio")
             mr = tuple(float(x) for x in mr.split(";")) if isinstance(mr, str) and mr.strip() else None
+            md = r.get("maint_days", 0.0)
             units.append(ThermalUnit(str(r["name"]), float(r["capacity"]), float(r["pmin"]),
-                                     float(r["coal"]), bool(r.get("must_run", False)), weeks, mr))
+                                     float(r["coal"]), bool(r.get("must_run", False)), weeks, mr,
+                                     float(md) if pd.notna(md) else 0.0))
 
         storages = []
         for r in pd.read_csv(path / "storages.csv").to_dict("records"):

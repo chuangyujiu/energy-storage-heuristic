@@ -333,3 +333,22 @@ def test_dynamic_share_runs_and_validates():
     res = solve(sd)
     assert res.p1.weeks[0].k == 1
     assert_checks(res)
+
+
+def test_maintenance_scheduled_in_low_load_period():
+    """等备用法：检修安排在备用最充裕（负荷低）的时段，且同时检修容量不超过上限。"""
+    from esh.commitment import Fleet
+    T = 24 * 20
+    nl = np.full(T, 300.0)
+    nl[24 * 10:24 * 13] = 50.0           # 第 11～13 天负荷最低
+    sd = toy(nl, [])
+    sd.config.commit_hours = 24
+    sd.config.maintenance = True
+    sd.config.maint_max_ratio = 0.2       # 6 × 100 MW 的 20% → 同时最多检修 1 台
+    for u in sd.units:
+        u.maint_days = 3
+    f = Fleet(sd)
+    assert f.maint.sum(0).max() <= 1
+    assert f.maint[:, 10:13].sum() == 3  # 最低负荷的 3 天里安排了一台
+    res = solve(sd)
+    assert_checks(res)
