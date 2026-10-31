@@ -33,9 +33,11 @@ def _baseline(sd: SystemData):
     fleet = Fleet(sd)
     cap = np.empty(sd.T)
     mn = np.empty(sd.T)
+    prev = None
     for wk, (a, b) in enumerate(sd.week_bounds()):
-        order, N, _, _ = fleet.initial(wk, a, b)
+        order, N, _, _ = fleet.initial(wk, a, b, prev)
         cap[a:b], mn[a:b] = fleet.lines(order, N, np.arange(a, b))
+        prev = set(order[:N])
     raw = sd.net_load
     return (np.clip(raw, mn, np.maximum(cap, mn)), np.maximum(mn - raw, 0.0),
             np.maximum(raw - cap, 0.0))

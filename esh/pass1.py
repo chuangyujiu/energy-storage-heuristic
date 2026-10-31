@@ -183,7 +183,8 @@ class Pass1:
         for wk, (a, b) in enumerate(self.sd.week_bounds()):
             if wk == 0:
                 self._setup_ring(True)
-            order, N, k0, kmax = self.fleet.initial(wk, a, b)
+            prev_on = set(self.commit[-1]) if self.commit else None
+            order, N, k0, kmax = self.fleet.initial(wk, a, b, prev_on)
             k0 = int(np.clip(k0, 0, kmax))
             s0 = st.snapshot()
             trials = 0

@@ -81,6 +81,17 @@ def convert(balance_xlsx, params_xlsx, out_dir, system: str = "西北",
     plants = plants[plants["有效性"] == 1].set_index("电站ID")
     units = _table(wb, "机组表")
     units = units[(units["有效性"] == 1) & units["电站ID"].isin(plants.index)]
+    feat = _table(wb, "特性表").set_index("机组型号")
+    loads = [f"负载{x}%" for x in (50, 60, 70, 80, 90)]
+
+    def model_of(cap):
+        """按单机容量对应特性表机型（参数表未指定特性 ID 时的默认假设）。"""
+        for lim, name in ((1000, "1000MW煤"), (600, "600MW煤超"), (300, "300MW煤"), (200, "200MW煤"),
+                          (125, "125MW煤")):
+            if cap >= lim:
+                return name
+        return "100MW煤"
+
     cons = _table(wb, "机组约束")
     cons = cons[(cons["有效性"] == 1) & (cons["类型"] == 0)].set_index("机组ID")
     months = [f"M{i}" for i in range(1, 13)]
@@ -101,7 +112,9 @@ def convert(balance_xlsx, params_xlsx, out_dir, system: str = "西北",
             for k in range(n):
                 th.append(dict(name=f"{u['名称']}#{k + 1}", capacity=cap, pmin=round(min(tech, 1.0) * cap, 3),
                                coal=score, must_run=False, must_run_weeks="", max_ratio=ratio,
-                               maint_days=float(u.get("检修天数") or 0)))
+                               maint_days=float(u.get("检修天数") or 0),
+                               heat_coef=round(float(feat.loc[model_of(cap), loads].astype(float).mean()), 4),
+                               startup=float(feat.loc[model_of(cap), "启停成本"])))
         elif p["类型"] in (PUMPED, BATTERY):
             key = "抽水蓄能" if p["类型"] == PUMPED else "新型储能"
             eta, cr = float(p["储能效率"]), float(p["储能比率"] or 1.0)
@@ -122,6 +135,7 @@ def convert(balance_xlsx, params_xlsx, out_dir, system: str = "西北",
            "min_reserve": float(loadrow["最小备用"]),
            "min_online_ratio": float(sysrow["保安开机"] or 0),
            "maint_max_ratio": float(sysrow["火电检修max"] or 0.7),
+           "coal_price": float(sysrow["标煤单价"] or 700),
            "hydro_in_curtail_base": True}
     (out / "config.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"系统": system, "负荷TWh": ts["load"].sum() / 1e6, "风电TWh": ts["wind"].sum() / 1e6,

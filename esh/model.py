@@ -25,6 +25,8 @@ class ThermalUnit:
     must_run_weeks: tuple | None = None  # 仅在这些周（0 起）必开，如供暖季；None 表示 must_run 全年有效
     max_ratio: tuple | None = None  # 分月最大出力比例（12 个值，如供暖季 0.8）；None 表示全年为 1
     maint_days: float = 0.0         # 年检修天数（0 表示不安排检修）
+    heat_coef: float = 1.0          # 煤耗系数（相对系统标杆煤耗，按机型的部分负荷系数平均）
+    startup: float = 0.0            # 一次启停成本（万元）
 
     def is_must_run(self, week: int) -> bool:
         if not self.must_run:
@@ -103,6 +105,11 @@ class Config:
     accident_largest_unit: bool = True     # 事故备用是否不低于在运最大单机
     min_reserve: float = 0.0               # 最小备用 MW
     commit_hours: int = 168                # 火电开机锁定周期（168 = 按周，24 = 按天）
+    startup_aware: bool = False            # 按日开机时计入启停成本：前一周期未开的机组加上启动成本分摊
+    coal_price: float = 700.0              # 标煤单价 元/t
+    base_heat_rate: float = 302.0          # 系统标杆煤耗 g/kWh
+    startup_yuan: float = 1e4              # 启停成本的单位换算（万元 → 元）
+    startup_spread_hours: float = 24.0     # 启动成本分摊的运行小时数
     maintenance: bool = False              # 是否安排火电检修（等备用法）
     maint_max_ratio: float = 0.7           # 同时检修容量上限占火电总装机比例（GTDS 系统表"火电检修max"）
     storage_share: str = "priority"        # 多类储能分工：priority 短时优先；energy / power 按电量 / 功率比例同时分担；
@@ -167,9 +174,11 @@ class SystemData:
             mr = r.get("max_ratio")
             mr = tuple(float(x) for x in mr.split(";")) if isinstance(mr, str) and mr.strip() else None
             md = r.get("maint_days", 0.0)
+            num = lambda k, d: float(r[k]) if k in r and pd.notna(r[k]) else d
             units.append(ThermalUnit(str(r["name"]), float(r["capacity"]), float(r["pmin"]),
                                      float(r["coal"]), bool(r.get("must_run", False)), weeks, mr,
-                                     float(md) if pd.notna(md) else 0.0))
+                                     float(md) if pd.notna(md) else 0.0,
+                                     num("heat_coef", 1.0), num("startup", 0.0)))
 
         storages = []
         for r in pd.read_csv(path / "storages.csv").to_dict("records"):

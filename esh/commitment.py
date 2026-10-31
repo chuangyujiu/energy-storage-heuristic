@@ -19,11 +19,26 @@ class Fleet:
         self._cache: dict = {}
         self.maint = self._schedule_maintenance() if self.cfg.maintenance else None
 
-    def order(self, week: int) -> list[int]:
-        """开机优先级：本周必开机组在前，其余按煤耗从低到高。"""
+    def order(self, week: int, prev_on: set | None = None) -> list[int]:
+        """开机优先级：本周必开机组在前，其余按煤耗从低到高。
+
+        startup_aware 时按单位电量成本排序：燃料成本（标煤单价 × 标杆煤耗 × 煤耗系数）
+        + 前一周期未开机组的启动成本分摊（启停成本 / (单机容量 × 分摊小时数)），元/MWh。
+        """
         must = [i for i, u in enumerate(self.units) if u.is_must_run(week)]
         rest = [i for i, u in enumerate(self.units) if not u.is_must_run(week)]
-        key = lambda i: self.units[i].coal
+        if self.cfg.startup_aware:
+            cfg = self.cfg
+            fuel = cfg.coal_price * cfg.base_heat_rate / 1e3
+
+            def key(i):
+                u = self.units[i]
+                c = fuel * u.heat_coef
+                if prev_on is not None and i not in prev_on:
+                    c += u.startup * cfg.startup_yuan / (u.capacity * cfg.startup_spread_hours)
+                return (c, -u.capacity, i)
+        else:
+            key = lambda i: self.units[i].coal
         return sorted(must, key=key) + sorted(rest, key=key)
 
     def n_must(self, week: int) -> int:
@@ -123,14 +138,14 @@ class Fleet:
             out[s:s + L] += self.cap[u]
         return mask
 
-    def initial(self, week: int, a: int, b: int):
+    def initial(self, week: int, a: int, b: int, prev_on: set | None = None):
         """初始开机台数 N 与初始目标 k₀ = 按天最大开机台数 − 最小开机台数。
 
         week 为锁定周期序号；必开机组（如供暖季）按该周期起点所在的周判断；检修中的机组不参与开机。
         """
         period = week
         week = min(a // 168, 51)
-        order = self.order(week)
+        order = self.order(week, prev_on)
         if self.maint is not None:
             order = [u for u in order if not self.maint[u, period]]
         nm = self.n_floor(week, order)

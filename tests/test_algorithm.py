@@ -352,3 +352,17 @@ def test_maintenance_scheduled_in_low_load_period():
     assert f.maint[:, 10:13].sum() == 3  # 最低负荷的 3 天里安排了一台
     res = solve(sd)
     assert_checks(res)
+
+
+def test_startup_aware_order_prefers_units_already_on():
+    """计入启停成本：前一周期已开的机组排在未开的同类机组前面；燃料成本低的排前。"""
+    from esh.commitment import Fleet
+    sd = toy(np.full(48, 250.0), [])
+    sd.config.startup_aware = True
+    for i, u in enumerate(sd.units):
+        u.heat_coef, u.startup = 1.0, 6.0
+    sd.units[5].heat_coef = 0.99                      # 燃料最便宜
+    f = Fleet(sd)
+    assert f.order(0)[0] == 5
+    order = f.order(0, prev_on={3, 4})
+    assert set(order[:2]) == {3, 4}                   # 已开机组免启动成本，排最前
