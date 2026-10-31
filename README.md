@@ -43,6 +43,19 @@ python -m pytest -q                           # 运行测试
 用线性规划（scipy HiGHS）在全年统一优化第二遍充放电，得到同样约束下的理论上限，与启发式第二遍比较。
 `displace` 最大化替代火电（储能放电），`absorb` 最大化吸收弃电（会偏向效率低的储能，因为损耗也计为吸收）。
 
+## 固定为 GTDS 的开机方案（试验分支）
+
+GTDS 的火电按日启停（开停只在 0 时）。`gtds-commit` 由 8760h 平衡表中各火电厂逐时出力，结合单机容量、台数、
+技术出力与分月出力上限，反推每厂每日开机台数，再以此作为固定的开机方案，本算法只做储能调度：
+
+```bash
+python -m esh gtds-commit data/nw --balance 8760h电力平衡结果汇总表.xlsx --params 机组参数表.xlsx \
+                          --no-thermal-reserve [--valley] -o data/results_nw_gtdscommit
+python -m esh compare-gtds --balance 8760h电力平衡结果汇总表.xlsx data/results_nw_gtdscommit
+```
+
+反推的每厂每日台数输出到 `gtds_commitment.csv`。
+
 ## 电力平衡示意图
 
 `run` 结束时自动在 `结果目录/figures/` 输出典型日（净负荷最大日、弃电最大日、储能放电最大日）的电力平衡示意图，

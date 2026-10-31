@@ -79,7 +79,30 @@ def main(argv=None):
     lb.add_argument("--commit-hours", type=int, help="火电开机锁定周期（小时）")
     lb.add_argument("--objective", choices=["absorb", "displace"], default="displace",
                     help="absorb=最大化吸收弃电；displace=最大化替代火电（储能放电）")
+    fc = sub.add_parser("gtds-commit", help="用 GTDS 平衡表反推的火电开机方案作为输入，只做储能调度")
+    fc.add_argument("data", help="输入数据目录（balance 命令生成）")
+    fc.add_argument("--balance", required=True, help="GTDS 8760h 电力平衡结果汇总表")
+    fc.add_argument("--params", required=True, help="机组参数表（GTDS 格式）")
+    fc.add_argument("--system", default="西北")
+    fc.add_argument("--no-thermal-reserve", action="store_true", help="火电不承担备用（容量线 = 在运可用容量）")
+    fc.add_argument("--valley", action="store_true", help="加第三遍")
+    fc.add_argument("-o", "--out", default="results_gtds_commit")
     a = ap.parse_args(argv)
+
+    if a.cmd == "gtds-commit":
+        from .fixedcommit import infer_commitment, solve_fixed
+        tab, avail, pmn, stat = infer_commitment(a.balance, a.params, a.system)
+        print(json.dumps(stat, ensure_ascii=False))
+        sd = SystemData.from_dir(a.data)
+        sd.config.thermal_valley_charging = a.valley
+        if a.no_thermal_reserve:
+            sd.config.load_reserve_rate = sd.config.accident_reserve_rate = sd.config.min_reserve = 0
+        res = solve_fixed(sd, avail, pmn)
+        out = Path(a.out)
+        s = report.write(sd, res, out)
+        tab.to_csv(out / "gtds_commitment.csv", index=False, encoding="utf-8-sig")
+        report.print_summary(s)
+        return
 
     if a.cmd == "lp-bound":
         from .lpbound import compare as lp_compare

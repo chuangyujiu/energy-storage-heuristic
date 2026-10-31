@@ -277,3 +277,19 @@ def test_lp_bound_not_below_heuristic():
     sd = toy(nl, [Storage("s", 100, 200, 0.81)], n_units=12)
     r = compare(sd, "displace")
     assert r["LP放电_MWh"] >= r["启发式放电_MWh"] - 1e-6
+
+
+def test_fixed_commitment_storage_only():
+    """开机方案固定时，只为削峰需求和消纳安排储能，校验通过。"""
+    from esh.fixedcommit import solve_fixed
+    T = 168
+    nl = np.full(T, 300.0)
+    for d in range(7):
+        nl[d * 24 + 11: d * 24 + 15] = 150.0     # 中午弃电（最小出力线 200）
+        nl[d * 24 + 19] = 420.0                  # 晚峰超过可用容量 400
+    sd = toy(nl, [Storage("bat", 50, 200, 1.0)])
+    sd.config.min_reserve = 0
+    res = solve_fixed(sd, np.full(T, 400.0), np.full(T, 200.0))
+    assert res.st.pdis[0, 19] == pytest.approx(20.0)
+    assert res.stages["pass2"][2].sum() == pytest.approx(0.0, abs=1e-6)
+    assert_checks(res)
